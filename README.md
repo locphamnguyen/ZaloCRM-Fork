@@ -1,104 +1,86 @@
-# ZaloCRM — Multi-Account Zalo Management
+# ZaloCRM — Quản lý nhiều tài khoản Zalo cá nhân
 
-Manage multiple personal Zalo accounts from one web dashboard. Real-time chat, customer CRM, appointments, team management, REST API & Webhooks.
+Hệ thống quản lý tập trung nhiều tài khoản Zalo cá nhân trên 1 giao diện web. Chat real-time, quản lý khách hàng, lịch hẹn, báo cáo, API & Webhook.
 
-## Features
+## Tính năng
 
-- **Multi-Zalo Accounts** — QR login, auto-reconnect, session persistence
-- **Real-time Chat** — Send/receive messages, images, files, groups
-- **Customer CRM** — Contact management with pipeline (new→contacted→interested→converted)
-- **Appointments** — Schedule, track, reminders
-- **Dashboard** — KPIs, charts, message volume, source distribution
-- **Reports** — Excel export, date filters
-- **Team Management** — RBAC (Owner/Admin/Member), teams, Zalo access control
-- **REST API** — Public API with API key auth for integrations
-- **Webhooks** — Real-time event notifications (message.received, contact.created, etc.)
-- **Rate Limiting** — Anti-block protection (200/day, burst detection)
-- **Notifications** — Bell icon with unreplied alerts, appointment reminders
-- **Dark/Light Theme** — Liquid Silicon design
+- **Quản lý nhiều Zalo** — Đăng nhập QR, tự kết nối lại, lưu phiên đăng nhập
+- **Chat real-time** — Gửi/nhận tin nhắn, ảnh, file, sticker, nhóm chat
+- **Quản lý khách hàng** — Pipeline (Mới → Đã liên hệ → Quan tâm → Chuyển đổi → Mất)
+- **Lịch hẹn** — Tạo, theo dõi, nhắc nhở tự động hàng ngày
+- **Dashboard** — Biểu đồ tin nhắn, KPI, nguồn khách hàng, trạng thái pipeline
+- **Báo cáo** — Xuất Excel, lọc theo thời gian
+- **Phân quyền** — Owner / Admin / Member, quản lý đội nhóm, phân quyền Zalo
+- **API công khai** — REST API với xác thực API key cho tích hợp bên ngoài
+- **Webhook** — Nhận thông báo khi có tin nhắn mới, khách hàng mới, Zalo kết nối/ngắt
+- **Chống block Zalo** — Giới hạn 200 tin/ngày, phát hiện gửi quá nhanh
+- **Thông báo** — Tin chưa trả lời >30 phút, lịch hẹn sắp tới, Zalo mất kết nối
+- **Tìm kiếm toàn hệ thống** — Tìm khách hàng, tin nhắn, lịch hẹn
+- **Giao diện** — Theme tối/sáng, thiết kế Liquid Silicon
 
-## Quick Start
+## Yêu cầu hệ thống
 
-### Prerequisites
-- Docker & Docker Compose
-- VPS with 4 vCPU / 4GB RAM recommended
+| Thành phần | Tối thiểu | Khuyến nghị |
+|-----------|----------|------------|
+| CPU | 1 vCPU | 2-4 vCPU |
+| RAM | 1 GB | 4 GB |
+| Ổ cứng | 10 GB | 20 GB SSD |
+| Hệ điều hành | Ubuntu 20.04+ | Ubuntu 22.04 LTS |
+| Phần mềm | Docker + Docker Compose | Docker 24+ |
 
-### Installation
+## Cài đặt nhanh
+
+> Hướng dẫn chi tiết: [HUONG-DAN-CAI-DAT.md](HUONG-DAN-CAI-DAT.md)
 
 ```bash
 git clone https://github.com/vuongnguyenbinh/ZaloCRM.git
 cd ZaloCRM
 cp .env.example .env
-# Edit .env — set passwords and secrets:
-#   openssl rand -hex 32  → JWT_SECRET
-#   openssl rand -hex 16  → ENCRYPTION_KEY
-#   set DB_PASSWORD
-
+# Sửa file .env — đặt mật khẩu và secret keys
 docker compose up -d --build
 ```
 
-Access: **http://your-server-ip:3080**
+Truy cập **http://IP-server:3080** → Tạo tài khoản admin lần đầu.
 
-First visit → create admin account.
+## Công nghệ sử dụng
 
-### Connect Zalo
+| Thành phần | Công nghệ |
+|-----------|----------|
+| Backend | Node.js 20 / Fastify 5 / Prisma 7 |
+| Frontend | Vue 3 / Vuetify 3 / Chart.js / Pinia |
+| Cơ sở dữ liệu | PostgreSQL 16 |
+| Real-time | Socket.IO |
+| Zalo | zca-js 2.x |
+| Triển khai | Docker Compose |
 
-1. Go to **Tài khoản Zalo**
-2. Click **Thêm Zalo** → enter name
-3. Click QR icon → scan with Zalo app
-4. Confirm on phone → Connected!
+## API & Webhook
 
-## API
+> Hướng dẫn chi tiết: [HUONG-DAN-SU-DUNG.md](HUONG-DAN-SU-DUNG.md)
 
-### Authentication
+### Xác thực API
 ```
 Header: X-API-Key: your-api-key
 ```
 
-Generate API key in Settings → API & Webhook.
+### Endpoint chính
 
-### Endpoints
+| Phương thức | Đường dẫn | Mô tả |
+|------------|----------|-------|
+| GET | `/api/public/contacts` | Danh sách khách hàng |
+| POST | `/api/public/contacts` | Tạo khách hàng mới |
+| POST | `/api/public/messages/send` | Gửi tin nhắn |
+| GET | `/api/public/appointments` | Danh sách lịch hẹn |
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/public/contacts` | List contacts |
-| POST | `/api/public/contacts` | Create contact |
-| GET | `/api/public/conversations` | List conversations |
-| GET | `/api/public/conversations/:id/messages` | Get messages |
-| POST | `/api/public/messages/send` | Send message |
-| GET | `/api/public/appointments` | List appointments |
-| POST | `/api/public/appointments` | Create appointment |
+### Sự kiện Webhook
 
-### Webhooks
+| Sự kiện | Mô tả |
+|---------|-------|
+| `message.received` | Tin nhắn mới đến |
+| `message.sent` | Tin nhắn gửi đi |
+| `contact.created` | Khách hàng mới |
+| `zalo.connected` | Zalo kết nối |
+| `zalo.disconnected` | Zalo mất kết nối |
 
-Configure webhook URL in Settings. Events:
+## Giấy phép
 
-| Event | Description |
-|-------|-------------|
-| `message.received` | New incoming message |
-| `message.sent` | Outgoing message |
-| `contact.created` | New contact auto-created |
-| `zalo.connected` | Zalo account connected |
-| `zalo.disconnected` | Zalo account disconnected |
-
-Payload:
-```json
-{
-  "event": "message.received",
-  "timestamp": "2026-03-28T12:00:00Z",
-  "data": { ... },
-  "signature": "hmac-sha256"
-}
-```
-
-## Tech Stack
-
-- **Backend:** Node.js 20 / Fastify 5 / Prisma 7 / Socket.IO
-- **Frontend:** Vue 3 / Vuetify 3 / Chart.js / Pinia
-- **Database:** PostgreSQL 16
-- **Zalo:** zca-js 2.x (unofficial)
-- **Deploy:** Docker Compose
-
-## License
-
-MIT
+MIT — Miễn phí sử dụng và chỉnh sửa.
