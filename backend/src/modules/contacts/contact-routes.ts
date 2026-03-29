@@ -7,6 +7,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../shared/database/prisma-client.js';
 import { authMiddleware } from '../auth/auth-middleware.js';
 import { logger } from '../../shared/utils/logger.js';
+import { runAutomationRules } from '../automation/automation-service.js';
 
 type QueryParams = Record<string, string>;
 
@@ -161,6 +162,24 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
         },
       });
 
+      const org = await prisma.organization.findUnique({
+        where: { id: user.orgId },
+        select: { id: true, name: true },
+      });
+      void runAutomationRules({
+        trigger: 'contact_created',
+        orgId: user.orgId,
+        org,
+        contact: {
+          id: contact.id,
+          fullName: contact.fullName,
+          phone: contact.phone,
+          status: contact.status,
+          source: contact.source,
+          assignedUserId: contact.assignedUserId,
+        },
+      });
+
       return reply.status(201).send(contact);
     } catch (err) {
       logger.error('[contacts] Create error:', err);
@@ -175,7 +194,10 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
       const { id } = request.params as { id: string };
       const body = request.body as Record<string, any>;
 
-      const existing = await prisma.contact.findFirst({ where: { id, orgId: user.orgId }, select: { id: true } });
+      const existing = await prisma.contact.findFirst({
+        where: { id, orgId: user.orgId },
+        select: { id: true, status: true, fullName: true, phone: true, source: true, assignedUserId: true },
+      });
       if (!existing) return reply.status(404).send({ error: 'Contact not found' });
 
       const updateData: any = {
@@ -205,6 +227,26 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
           _count: { select: { conversations: true } },
         },
       });
+
+      if (existing.status !== updated.status) {
+        const org = await prisma.organization.findUnique({
+          where: { id: user.orgId },
+          select: { id: true, name: true },
+        });
+        void runAutomationRules({
+          trigger: 'status_changed',
+          orgId: user.orgId,
+          org,
+          contact: {
+            id: updated.id,
+            fullName: updated.fullName,
+            phone: updated.phone,
+            status: updated.status,
+            source: updated.source,
+            assignedUserId: updated.assignedUserId,
+          },
+        });
+      }
 
       return updated;
     } catch (err) {

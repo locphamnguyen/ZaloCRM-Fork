@@ -18,10 +18,12 @@ model Organization {
   zaloAccounts  ZaloAccount[]
   contacts      Contact[]
   conversations Conversation[]
-  appointments  Appointment[]
-  activityLogs  ActivityLog[]
-  dailyStats    DailyMessageStat[]
-  settings      AppSetting[]
+  appointments    Appointment[]
+  activityLogs    ActivityLog[]
+  dailyStats      DailyMessageStat[]
+  settings        AppSetting[]
+  automationRules AutomationRule[]
+  messageTemplates MessageTemplate[]
 
   @@map("organizations")
 }
@@ -249,3 +251,40 @@ model AppSetting {
   @@unique([orgId, settingKey])
   @@map("app_settings")
 }
+
+model AutomationRule {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  name        String
+  description String?
+  trigger     String
+  conditions  Json     @default("[]")
+  actions     Json     @default("[]")
+  enabled     Boolean  @default(true)
+  priority    Int      @default(0)
+  runCount    Int      @default(0) @map("run_count")
+  lastRunAt   DateTime? @map("last_run_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, trigger, enabled, priority])
+  @@map("automation_rules")
+}
+
+model MessageTemplate {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  name      String
+  content   String
+  category  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, category])
+  @@map("message_templates")
+}
+

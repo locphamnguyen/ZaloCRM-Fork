@@ -110,6 +110,7 @@ const menuItems = [
   { title: 'Báo cáo', icon: 'mdi-chart-arc', path: '/reports' },
   { title: 'Nhân viên', icon: 'mdi-account-cog-outline', path: '/settings' },
   { title: 'API & Webhook', icon: 'mdi-api', path: '/api-settings' },
+  { title: 'Automation', icon: 'mdi-robot-outline', path: '/automation' },
 ];
 
 function toggleTheme() {

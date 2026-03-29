@@ -6,6 +6,7 @@ import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 import { randomUUID } from 'node:crypto';
 import { emitWebhook } from '../api/webhook-service.js';
+import { runAutomationRules } from '../automation/automation-service.js';
 
 export interface IncomingMessage {
   accountId: string;
@@ -93,6 +94,40 @@ export async function handleIncomingMessage(
       contentType: msg.contentType,
       sentAt: message.sentAt,
     });
+
+    if (!msg.isSelf) {
+      const org = await prisma.organization.findUnique({
+        where: { id: account.orgId },
+        select: { id: true, name: true },
+      });
+      const contact = contactId
+        ? await prisma.contact.findUnique({
+            where: { id: contactId },
+            select: { id: true, fullName: true, phone: true, status: true, source: true, assignedUserId: true },
+          })
+        : null;
+      const conversationDetails = await prisma.conversation.findUnique({
+        where: { id: conversation.id },
+        select: { id: true, unreadCount: true, externalThreadId: true, threadType: true, zaloAccountId: true },
+      });
+
+      void runAutomationRules({
+        trigger: 'message_received',
+        orgId: account.orgId,
+        org,
+        contact,
+        conversation: conversationDetails
+          ? {
+              id: conversationDetails.id,
+              unreadCount: conversationDetails.unreadCount,
+              threadId: conversationDetails.externalThreadId,
+              threadType: conversationDetails.threadType,
+              zaloAccountId: conversationDetails.zaloAccountId,
+            }
+          : null,
+        message: { id: message.id, content: message.content, contentType: message.contentType, senderType: message.senderType },
+      });
+    }
 
     return {
       message,
