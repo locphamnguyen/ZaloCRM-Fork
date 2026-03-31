@@ -81,6 +81,7 @@ model ZaloAccount {
   avatarUrl       String?   @map("avatar_url")
   phone           String?
   status          String    @default("disconnected") // connected, disconnected, qr_pending
+  proxyUrl        String?   @map("proxy_url")
   sessionData     Json?     @map("session_data")
   lastConnectedAt DateTime? @map("last_connected_at")
   createdAt       DateTime  @default(now()) @map("created_at")

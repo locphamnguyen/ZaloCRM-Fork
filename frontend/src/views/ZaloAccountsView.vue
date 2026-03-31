@@ -13,9 +13,18 @@
             {{ statusText(item.liveStatus || item.status) }}
           </v-chip>
         </template>
+        <template #item.proxy="{ item }">
+          <v-chip v-if="item.hasProxy" color="info" size="small" variant="tonal">
+            <v-icon start size="small">mdi-shield-check</v-icon>Proxy
+          </v-chip>
+          <span v-else class="text-grey text-caption">Trực tiếp</span>
+        </template>
         <template #item.actions="{ item }">
           <v-btn v-if="authStore.isAdmin" icon size="small" color="cyan" title="Phân quyền truy cập" @click="openAccess(item)">
             <v-icon>mdi-shield-account</v-icon>
+          </v-btn>
+          <v-btn icon size="small" color="orange" title="Cấu hình Proxy" @click="openProxy(item)">
+            <v-icon>mdi-earth</v-icon>
           </v-btn>
           <v-btn icon size="small" color="success" @click="syncContacts(item.id)" title="Đồng bộ danh bạ Zalo" :loading="syncing === item.id">
             <v-icon>mdi-account-sync</v-icon>
@@ -38,7 +47,14 @@
       <v-card>
         <v-card-title>Thêm tài khoản Zalo</v-card-title>
         <v-card-text>
-          <v-text-field v-model="newAccountName" label="Tên hiển thị (VD: Zalo Sale Hương)" />
+          <v-text-field v-model="newAccountName" label="Tên hiển thị (VD: Zalo Sale Hương)" class="mb-2" />
+          <v-text-field
+            v-model="newAccountProxy"
+            label="Proxy URL (tùy chọn)"
+            placeholder="http://user:pass@host:port"
+            hint="Để trống nếu không dùng proxy"
+            persistent-hint
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -87,6 +103,32 @@
       </v-card>
     </v-dialog>
 
+    <!-- Proxy config dialog -->
+    <v-dialog v-model="showProxyDialog" max-width="450">
+      <v-card>
+        <v-card-title>Cấu hình Proxy — {{ proxyTarget?.displayName || 'Tài khoản' }}</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="proxyUrlEdit"
+            label="Proxy URL"
+            placeholder="http://user:pass@host:port"
+            hint="Để trống để dùng kết nối trực tiếp"
+            persistent-hint
+            clearable
+          />
+          <v-alert v-if="proxyTarget?.hasProxy" type="info" density="compact" class="mt-3">
+            Proxy hiện tại: {{ proxyTarget?.proxyUrl }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn v-if="proxyTarget?.hasProxy" color="warning" variant="text" @click="handleRemoveProxy">Xóa proxy</v-btn>
+          <v-spacer />
+          <v-btn @click="showProxyDialog = false">Hủy</v-btn>
+          <v-btn color="primary" :loading="savingProxy" @click="handleSaveProxy">Lưu</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Access control dialog -->
     <ZaloAccessDialog
       v-model="showAccessDialog"
@@ -108,7 +150,7 @@ const {
   showQRDialog, qrImage, qrScanned, scannedName, qrError,
   statusColor, statusText,
   fetchAccounts, addAccount, loginAccount, reconnectAccount, deleteAccount,
-  cancelQR, setupSocket,
+  updateProxy, cancelQR, setupSocket,
 } = useZaloAccounts();
 
 const authStore = useAuthStore();
@@ -117,14 +159,20 @@ const showAddDialog = ref(false);
 const syncing = ref<string | null>(null);
 const showDeleteDialog = ref(false);
 const showAccessDialog = ref(false);
+const showProxyDialog = ref(false);
 const newAccountName = ref('');
+const newAccountProxy = ref('');
 const deleteTarget = ref<ZaloAccount | null>(null);
 const accessTarget = ref<ZaloAccount | null>(null);
+const proxyTarget = ref<ZaloAccount | null>(null);
+const proxyUrlEdit = ref('');
+const savingProxy = ref(false);
 
 const headers = [
   { title: 'Tên', key: 'displayName', sortable: true },
   { title: 'Zalo UID', key: 'zaloUid' },
   { title: 'SĐT', key: 'phone' },
+  { title: 'Proxy', key: 'proxy', sortable: false },
   { title: 'Trạng thái', key: 'status', sortable: true },
   { title: 'Hành động', key: 'actions', sortable: false, align: 'end' as const },
 ];
@@ -142,10 +190,11 @@ async function syncContacts(accountId: string) {
 }
 
 async function handleAddAccount() {
-  const ok = await addAccount(newAccountName.value);
+  const ok = await addAccount(newAccountName.value, newAccountProxy.value);
   if (ok) {
     showAddDialog.value = false;
     newAccountName.value = '';
+    newAccountProxy.value = '';
   }
 }
 
@@ -166,6 +215,28 @@ async function handleDeleteAccount() {
     showDeleteDialog.value = false;
     deleteTarget.value = null;
   }
+}
+
+function openProxy(account: ZaloAccount) {
+  proxyTarget.value = account;
+  proxyUrlEdit.value = '';
+  showProxyDialog.value = true;
+}
+
+async function handleSaveProxy() {
+  if (!proxyTarget.value) return;
+  savingProxy.value = true;
+  const ok = await updateProxy(proxyTarget.value.id, proxyUrlEdit.value || null);
+  savingProxy.value = false;
+  if (ok) showProxyDialog.value = false;
+}
+
+async function handleRemoveProxy() {
+  if (!proxyTarget.value) return;
+  savingProxy.value = true;
+  const ok = await updateProxy(proxyTarget.value.id, null);
+  savingProxy.value = false;
+  if (ok) showProxyDialog.value = false;
 }
 
 onMounted(() => {
