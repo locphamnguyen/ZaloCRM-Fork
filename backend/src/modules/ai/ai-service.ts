@@ -1,7 +1,9 @@
 import { prisma } from '../../shared/database/prisma-client.js';
 import { config } from '../../config/index.js';
+import { getProviderConfig, getAvailableProviders } from './provider-registry.js';
 import { generateWithAnthropic } from './providers/anthropic.js';
 import { generateWithGemini } from './providers/gemini.js';
+import { generateWithOpenaiCompat } from './providers/openai-compat.js';
 import { buildReplyDraftPrompt } from './prompts/reply-draft.js';
 import { buildSummaryPrompt } from './prompts/summary.js';
 import { buildSentimentPrompt } from './prompts/sentiment.js';
@@ -32,13 +34,14 @@ function buildConversationContext(messages: MessageContext[]) {
 }
 
 async function getProviderApiKey(orgId: string, provider: string) {
-  if (provider === 'anthropic') {
-    if (config.anthropicApiKey) return config.anthropicApiKey;
-    const setting = await prisma.appSetting.findFirst({ where: { orgId, settingKey: 'ai_anthropic_api_key' } });
-    return setting?.valuePlain || '';
-  }
-  if (config.geminiApiKey) return config.geminiApiKey;
-  const setting = await prisma.appSetting.findFirst({ where: { orgId, settingKey: 'ai_gemini_api_key' } });
+  /* 1. Check registry (env-based) */
+  const providerDef = getProviderConfig(provider);
+  if (providerDef?.authToken) return providerDef.authToken;
+
+  /* 2. Fallback: per-org DB setting */
+  const setting = await prisma.appSetting.findFirst({
+    where: { orgId, settingKey: `ai_${provider}_api_key` },
+  });
   return setting?.valuePlain || '';
 }
 
@@ -49,15 +52,10 @@ export async function getAiConfig(orgId: string) {
       data: { orgId, provider: config.aiDefaultProvider, model: config.aiDefaultModel, maxDaily: 500, enabled: true },
     });
   }
-  const [anthropicKey, geminiKey] = await Promise.all([
-    getProviderApiKey(orgId, 'anthropic'),
-    getProviderApiKey(orgId, 'gemini'),
-  ]);
-  return {
-    ...aiConfig,
-    hasAnthropicKey: !!anthropicKey,
-    hasGeminiKey: !!geminiKey,
-  };
+  const availableProviders = getAvailableProviders();
+  const hasKey = async (p: string) => !!(await getProviderApiKey(orgId, p));
+  const [hasAnthropicKey, hasGeminiKey] = await Promise.all([hasKey('anthropic'), hasKey('gemini')]);
+  return { ...aiConfig, hasAnthropicKey, hasGeminiKey, availableProviders };
 }
 
 export async function updateAiConfig(orgId: string, input: { provider?: string; model?: string; maxDaily?: number; enabled?: boolean }) {
@@ -110,9 +108,18 @@ async function loadConversation(conversationId: string, orgId: string) {
 }
 
 async function generateText(provider: string, apiKey: string, model: string, system: string, prompt: string) {
-  if (provider === 'anthropic') return generateWithAnthropic(apiKey, model, system, prompt);
-  if (provider === 'gemini') return generateWithGemini(apiKey, model, system, prompt);
-  throw new Error('Unsupported AI provider');
+  const providerDef = getProviderConfig(provider);
+  const baseUrl = providerDef?.baseUrl || '';
+
+  if (provider === 'anthropic') return generateWithAnthropic(baseUrl, apiKey, model, system, prompt);
+  if (provider === 'gemini') return generateWithGemini(baseUrl, apiKey, model, system, prompt);
+
+  /* OpenAI, Qwen, Kimi all use OpenAI-compatible chat/completions API */
+  if (provider === 'openai') return generateWithOpenaiCompat(`${baseUrl}/v1/chat/completions`, apiKey, model, system, prompt);
+  if (provider === 'qwen') return generateWithOpenaiCompat(`${baseUrl}/compatible-mode/v1/chat/completions`, apiKey, model, system, prompt);
+  if (provider === 'kimi') return generateWithOpenaiCompat(`${baseUrl}/v1/chat/completions`, apiKey, model, system, prompt);
+
+  throw new Error(`Unsupported AI provider: ${provider}`);
 }
 
 async function saveSuggestion(input: { orgId: string; conversationId: string; messageId?: string; type: AiTaskType; content: string; confidence: number }) {

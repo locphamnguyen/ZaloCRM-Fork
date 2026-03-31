@@ -1,5 +1,5 @@
-export async function generateWithGemini(apiKey: string, model: string, system: string, prompt: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+export async function generateWithGemini(baseUrl: string, apiKey: string, model: string, system: string, prompt: string) {
+  const url = `${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   try {

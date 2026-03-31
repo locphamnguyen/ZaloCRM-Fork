@@ -4,3 +4,4 @@ dist/
 *.log
 backups/
 .DS_Store
+.gstack/

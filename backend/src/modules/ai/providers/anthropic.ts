@@ -1,12 +1,14 @@
-export async function generateWithAnthropic(apiKey: string, model: string, system: string, prompt: string) {
+export async function generateWithAnthropic(baseUrl: string, apiKey: string, model: string, system: string, prompt: string) {
+  const url = `${baseUrl}/v1/messages`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         'x-api-key': apiKey,
+        authorization: `Bearer ${apiKey}`,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -19,8 +21,8 @@ export async function generateWithAnthropic(apiKey: string, model: string, syste
     });
 
     if (!response.ok) {
-      const status = response.status;
-      throw new Error(`Anthropic request failed with status ${status}`);
+      const body = await response.text().catch(() => '');
+      throw new Error(`Anthropic request failed (${response.status}): ${body}`);
     }
 
     const data = await response.json() as { content?: Array<{ type: string; text?: string }> };
