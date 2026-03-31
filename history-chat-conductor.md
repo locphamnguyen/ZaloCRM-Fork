@@ -289,3 +289,164 @@ sprint-plan-claudekit.md (context hint)
 | `plans/how-to-generate-conductor-prompts.md` | Meta-prompt để tự sinh conductor-prompts cho dự án bất kỳ |
 | `plans/sprint-plan-claudekit.md` | Sprint plan dạng "context hint" cho ClaudeKit pipeline |
 | `/root/0project/history-chat-conductor.md` | File này |
+
+---
+
+## Session 2 — 31/03/2026
+
+### Chủ đề
+
+- Tạo dự án **veo3promanager** (ClaudeKit) và **veo3promanager-gstack** (gstack)
+- Viết sprint-plan.md cho cả 2 chuẩn
+- Tạo hướng dẫn meta-prompt cho gstack pipeline
+- Tóm tắt cấu trúc file và push GitHub
+
+---
+
+## Q&A 8 — Tạo dự án veo3promanager (ClaudeKit)
+
+**Hỏi:** Đọc file `history-chat-zalocrm.md`, tạo sprint-plan cho dự án **Veo3 Pro Manager** — phần mềm quản lý và tạo video Veo3 thông qua đăng nhập Chrome profile để lấy cookie.
+
+**Kết quả:** Tạo thư mục `/root/0project/veo3promanager/` với:
+
+**Tổng quan dự án:**
+- Desktop app: Electron 31 + React 18 + TypeScript
+- Styling: Tailwind CSS + shadcn/ui, State: Zustand
+- Storage: SQLite (better-sqlite3)
+- Chrome automation: Puppeteer — lấy cookie từ Chrome profile thật
+- Video: ffmpeg — thumbnail generation
+
+**5 sprint theo chuẩn ClaudeKit (context hint):**
+
+| Sprint | Tên | Branch |
+|--------|-----|--------|
+| S1 | Project Setup + Chrome Auth | `feat/setup-auth` |
+| S2 | Veo3 API Integration | `feat/veo3-api` |
+| S3 | Video Manager Dashboard | `feat/video-manager` |
+| S4 | Batch Generator + Templates | `feat/batch-generator` |
+| S5 | Projects + Export + Settings | `feat/projects-settings` |
+
+**File sinh ra:** `plans/sprint-plan-claudekit.md`
+
+**Thứ tự chạy:**
+```
+Wave 1: S1 (Chrome Auth — foundation)
+  ↓
+Wave 2: S2 + S3 (song song)
+  ↓
+Wave 3: S4
+  ↓
+Wave 4: S5 (final assembly)
+```
+
+---
+
+## Q&A 9 — Tạo dự án veo3promanager-gstack (gstack 7-phase)
+
+**Hỏi:** Tiếp tục tạo sprint-plan theo gstack 7-phase cho dự án veo3promanager-gstack.
+
+**Kết quả:** Tạo thư mục `/root/0project/veo3promanager-gstack/` với **6 sprint đầy đủ 7 phase**:
+
+| Sprint | Tên | Branch |
+|--------|-----|--------|
+| S1 | Project Setup + Chrome Auth | `feat/setup-auth` |
+| S2 | Veo3 API Integration | `feat/veo3-api` |
+| S3 | Video Manager Dashboard | `feat/video-manager` |
+| S4 | Batch Generator + Templates | `feat/batch-generator` |
+| S5 | Projects + Export | `feat/projects-export` |
+| S6 | Settings + Polish | `feat/settings-polish` |
+
+**Nội dung mỗi sprint bao gồm:**
+- Phase 1 THINK: câu hỏi cụ thể cần trả lời trước khi code
+- Phase 2 PLAN: CEO scope + Eng Review (SQLite schema, TypeScript interfaces, IPC channels, file tree) + Design Review
+- Phase 3 BUILD: ràng buộc và file ownership
+- Phase 4 REVIEW: checklist security/performance
+- Phase 5 TEST: 4-6 test scenario cụ thể
+- Phase 6 SHIP: branch name, PR target
+- Phase 7 REFLECT: 3-4 metrics đo được
+
+**Kỹ thuật đặc biệt trong sprint plan:**
+
+| Sprint | Kỹ thuật chính |
+|--------|---------------|
+| S1 (Chrome Auth) | Puppeteer launch Chrome với userDataDir, AES-256 mã hoá cookie, SQLite sessions table |
+| S2 (Veo3 API) | Reverse engineer API endpoints từ Chrome DevTools, p-queue concurrency 2, streaming download |
+| S3 (Video Manager) | @tanstack/react-virtual cho 500 items, ffmpeg thumbnail cache, VideoCard states |
+| S4 (Batch) | papaparse CSV, variable engine `{{var}}`, 5 style presets, max 50 prompts/batch |
+| S5 (Projects) | archiver ZIP streaming (không buffer RAM), express local share server, qrcode |
+| S6 (Settings) | AppSettings JSON, keyboard shortcuts, AppShell final assembly với toàn bộ 7 routes |
+
+**File ownership rule:** Mỗi sprint chỉ tạo file của mình. S6 được phép sửa `src/App.tsx` (final assembly).
+
+**Workspace Prompts:** Cuối file có sẵn 6 prompts để paste vào Conductor.
+
+---
+
+## Q&A 10 — Hướng dẫn tạo Conductor Prompts chuẩn gstack
+
+**Hỏi:** Tạo file hướng dẫn `how-to-generate-conductor-prompts-gstack.md` — cách tạo conductor prompts + sprint-plan.md + conductor.json + bin scripts cho bất kỳ dự án nào.
+
+**Kết quả:** `plans/how-to-generate-conductor-prompts-gstack.md` (506 dòng) với:
+
+**6 bước đầy đủ:**
+
+| Bước | Nội dung |
+|------|----------|
+| 1 | Meta-prompt để Claude tự tạo sprint-plan.md (7 phase × N sprint) |
+| 2 | Tạo conductor.json (chỉ cần `setup` + `archive` hooks) |
+| 3 | Template bin/dev-setup cho Node.js / Electron / Python |
+| 4 | Template bin/dev-teardown (xoá .env khi đóng workspace) |
+| 5 | Lệnh git init + branch + push GitHub |
+| 6 | Cấu hình Conductor (workspace name, branch, paste prompt) |
+
+**Kèm theo:**
+- 2 ví dụ điền hoàn chỉnh (dự án có MVP sẵn + dự án mới hoàn toàn)
+- Các biến thể (tuần tự, bỏ phase, security đặc biệt)
+- Bảng nguyên tắc viết sprint tốt vs xấu (5 nguyên tắc)
+- Checklist 6 điểm trước khi paste meta-prompt
+- So sánh gstack vs ClaudeKit — khi nào dùng cái nào
+
+**Format meta-prompt mẫu:**
+```
+Đọc toàn bộ codebase. Tạo plans/sprint-plan.md theo chuẩn gstack 7-phase.
+
+## Thông tin dự án: [tên, mô tả, tech stack]
+
+## Danh sách sprint:
+| STT | Tên | Branch | Mô tả | File ownership |
+
+## Yêu cầu mỗi sprint: 7 phase đầy đủ, schema SQL, API endpoints, test scenarios, metrics
+
+## Cuối file: Wave order + Workspace Prompts sẵn để paste Conductor
+```
+
+---
+
+## Tổng hợp file đã tạo trong session 2
+
+| File | Dự án | Mô tả |
+|------|-------|-------|
+| `plans/sprint-plan-claudekit.md` | veo3promanager | 5 sprint × ClaudeKit context hint |
+| `plans/sprint-plan.md` | veo3promanager-gstack | 6 sprint × gstack 7 phase đầy đủ (963 dòng) |
+| `conductor.json` | veo3promanager-gstack | Hook setup + archive |
+| `bin/dev-setup` | veo3promanager-gstack | Copy .env + npm install |
+| `bin/dev-teardown` | veo3promanager-gstack | Xoá .env tránh leak secrets |
+| `plans/how-to-generate-conductor-prompts-gstack.md` | veo3promanager-gstack | Hướng dẫn tạo gstack prompts (506 dòng) |
+
+**GitHub repos đã tạo:**
+- https://github.com/locphamnguyen/veo3promanager-gstack (public, 7 branches)
+
+---
+
+## So sánh 2 chuẩn sprint plan
+
+| | **gstack sprint-plan.md** | **ClaudeKit sprint-plan-claudekit.md** |
+|--|--------------------------|---------------------------------------|
+| Độ dài | ~300-400 dòng/sprint | ~50-80 dòng/sprint |
+| Schema DB | Viết đầy đủ SQL/Prisma sẵn | Chỉ nêu ý tưởng, ClaudeKit tự research |
+| API endpoints | Liệt kê đầy đủ tên + method | Không cần, ClaudeKit tự thiết kế |
+| File tree | Cây thư mục đầy đủ | Chỉ ghi file ownership |
+| TypeScript interfaces | Viết sẵn | Không cần |
+| Agent đọc và làm gì | Thực thi trực tiếp theo plan | Dùng làm context hint cho brainstorm |
+| Ai viết phần kỹ thuật | Bạn (hoặc Claude viết trước) | ClaudeKit tự research và quyết định |
+| Khi nào dùng | Requirements rõ, cần kiểm soát | Dự án mới, muốn AI tự khám phá |
