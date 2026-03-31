@@ -14,6 +14,8 @@ export interface ZaloAccount {
   status: string;
   liveStatus?: string;
   phone: string | null;
+  proxyUrl: string | null;
+  hasProxy: boolean;
   sessionData: any;
   ownerUserId: string;
   createdAt: string;
@@ -64,10 +66,13 @@ export function useZaloAccounts() {
     }
   }
 
-  async function addAccount(displayName: string) {
+  async function addAccount(displayName: string, proxyUrl?: string) {
     adding.value = true;
     try {
-      await api.post('/zalo-accounts', { displayName: displayName || undefined });
+      await api.post('/zalo-accounts', {
+        displayName: displayName || undefined,
+        proxyUrl: proxyUrl || undefined,
+      });
       await fetchAccounts();
       return true;
     } catch (err: any) {
@@ -121,6 +126,17 @@ export function useZaloAccounts() {
     socket?.emit('zalo:unsubscribe', { accountId: currentLoginAccountId.value });
   }
 
+  async function updateProxy(accountId: string, proxyUrl: string | null) {
+    try {
+      await api.put(`/zalo-accounts/${accountId}/proxy`, { proxyUrl });
+      await fetchAccounts();
+      return true;
+    } catch (err: any) {
+      console.error('Failed to update proxy:', err);
+      return false;
+    }
+  }
+
   function setupSocket() {
     socket = io({ transports: ['websocket', 'polling'] });
 
@@ -165,6 +181,6 @@ export function useZaloAccounts() {
     showQRDialog, qrImage, qrScanned, scannedName, qrError,
     statusColor, statusText,
     fetchAccounts, addAccount, loginAccount, reconnectAccount, deleteAccount,
-    cancelQR, setupSocket,
+    updateProxy, cancelQR, setupSocket,
   };
 }
