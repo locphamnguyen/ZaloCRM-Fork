@@ -1,4 +1,6 @@
-# Hướng dẫn cài đặt ZaloCRM
+# Hướng dẫn cài đặt ZaloCRM v2.0
+
+**GitHub:** [https://github.com/locphamnguyen/zalocrm](https://github.com/locphamnguyen/zalocrm)
 
 ## Bước 1: Chuẩn bị VPS
 
@@ -31,10 +33,10 @@ docker compose version
 
 ```bash
 # Tải ZaloCRM từ GitHub
-git clone https://github.com/vuongnguyenbinh/ZaloCRM.git
+git clone https://github.com/locphamnguyen/zalocrm.git
 
 # Vào thư mục dự án
-cd ZaloCRM
+cd zalocrm
 ```
 
 ## Bước 3: Cấu hình
@@ -50,19 +52,48 @@ Mở file `.env` để sửa:
 nano .env
 ```
 
-Sửa các giá trị sau:
+### Cấu hình bắt buộc
 
 ```
 # Mật khẩu database — đặt bất kỳ (nhớ giữ bí mật)
 DB_PASSWORD=matkhau_cua_ban_o_day
 
-# Secret keys — chạy 2 lệnh bên dưới để tạo giá trị ngẫu nhiên
+# Secret keys — chạy lệnh bên dưới để tạo giá trị ngẫu nhiên
 JWT_SECRET=     # Dán kết quả lệnh: openssl rand -hex 32
 ENCRYPTION_KEY= # Dán kết quả lệnh: openssl rand -hex 16
 
 # URL công khai (nếu có domain)
 APP_URL=https://ten-domain-cua-ban.com
 ```
+
+### Cấu hình AI Assistant (tuỳ chọn)
+
+ZaloCRM hỗ trợ nhiều nhà cung cấp AI. Chọn 1 trong các tùy chọn:
+
+```
+# --- Anthropic (Claude) ---
+AI_PROVIDER=anthropic
+AI_API_KEY=sk-ant-...
+AI_MODEL=claude-sonnet-4-20250514
+
+# --- OpenAI ---
+AI_PROVIDER=openai
+AI_API_KEY=sk-...
+AI_MODEL=gpt-4o
+AI_BASE_URL=https://api.openai.com/v1    # Tuỳ chọn, mặc định OpenAI
+
+# --- Qwen ---
+AI_PROVIDER=qwen
+AI_API_KEY=sk-...
+AI_MODEL=qwen-max
+
+# --- Kimi ---
+AI_PROVIDER=kimi
+AI_API_KEY=sk-...
+AI_MODEL=moonshot-v1-128k
+```
+
+> Nếu dùng proxy cho AI API, thêm `AI_BASE_URL=https://proxy-url/v1`
 
 **Tạo secret keys:**
 
@@ -117,11 +148,21 @@ docker compose ps
 
 1. Vào menu **Tài khoản Zalo** (bên trái)
 2. Nhấn **Thêm Zalo** → đặt tên (VD: "Zalo Sale Hương")
-3. Nhấn biểu tượng **QR** → mã QR hiện ra
-4. **Mở Zalo trên điện thoại** → Quét mã QR
-5. Xác nhận trên điện thoại → Trạng thái chuyển thành **Đã kết nối** (xanh lá)
+3. *(Tuỳ chọn)* Nhập **Proxy URL** nếu cần dùng proxy: `http://user:pass@host:port`
+4. Nhấn biểu tượng **QR** → mã QR hiện ra
+5. **Mở Zalo trên điện thoại** → Quét mã QR
+6. Xác nhận trên điện thoại → Trạng thái chuyển thành **Đã kết nối** (xanh lá)
 
-🎉 **Hoàn tất!** Bắt đầu nhận tin nhắn real-time.
+> 💡 **Proxy per-account:** Mỗi tài khoản Zalo có thể cấu hình proxy HTTP riêng để tránh block IP. Nhấn nút 🌐 bên cạnh tài khoản để thêm/sửa proxy. Chi tiết: [PR #9](https://github.com/locphamnguyen/zalocrm/pull/9)
+
+## Bước 7: Cài PWA trên điện thoại (tuỳ chọn)
+
+ZaloCRM v2.0 hỗ trợ PWA — cài như ứng dụng trên điện thoại:
+
+1. Mở **Chrome/Safari** trên điện thoại → vào URL hệ thống
+2. **Android:** nhấn menu ⋮ → "Thêm vào màn hình chính"
+3. **iOS:** nhấn nút Share → "Thêm vào Màn hình chính"
+4. Ứng dụng hoạt động offline, nhận thông báo push
 
 ---
 
@@ -165,7 +206,7 @@ cloudflared tunnel run
 ## Cập nhật phiên bản mới
 
 ```bash
-cd ZaloCRM
+cd zalocrm
 
 # Tải phiên bản mới
 git pull
@@ -223,7 +264,14 @@ docker compose restart app
 
 - Hệ thống tự kết nối lại trong 30 giây
 - Nếu vẫn không được → vào **Tài khoản Zalo** → quét QR lại
+- Thử cấu hình **Proxy** cho tài khoản nếu bị block IP
 - **Lưu ý:** KHÔNG mở Zalo Web trên trình duyệt
+
+### AI không hoạt động
+
+- Kiểm tra `AI_PROVIDER` và `AI_API_KEY` trong `.env`
+- Nếu dùng proxy: kiểm tra `AI_BASE_URL` có đúng không
+- Xem log: `docker compose logs app | grep -i ai`
 
 ### Quên mật khẩu admin
 

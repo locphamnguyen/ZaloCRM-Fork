@@ -1,6 +1,6 @@
 {
   "name": "zalo-sales-crm-backend",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Zalo Sales CRM Backend API",
   "main": "dist/app.js",
   "type": "module",
