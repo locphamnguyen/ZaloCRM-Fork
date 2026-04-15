@@ -21,6 +21,7 @@ export interface IncomingMessage {
   threadType: 'user' | 'group'; // user or group conversation
   groupName?: string;       // group name if group message
   attachments?: any[];
+  isBackfill?: boolean;     // true for old_messages / sync backfill — skip automations
 }
 
 export interface HandleMessageResult {
@@ -68,20 +69,30 @@ export async function handleIncomingMessage(
     const conversation = await findOrCreateConversation(msg, account.orgId, contactId);
 
     const sentAt = new Date(msg.timestamp);
-    const message = await prisma.message.create({
-      data: {
-        id: randomUUID(),
-        conversationId: conversation.id,
-        zaloMsgId: msg.msgId || null,
-        senderType: msg.isSelf ? 'self' : 'contact',
-        senderUid: msg.senderUid,
-        senderName: msg.senderName || null,
-        content: msg.content || '',
-        contentType: msg.contentType || 'text',
-        attachments: msg.attachments ?? [],
-        sentAt,
-      },
-    });
+    let message;
+    try {
+      message = await prisma.message.create({
+        data: {
+          id: randomUUID(),
+          conversationId: conversation.id,
+          zaloMsgId: msg.msgId || null,
+          senderType: msg.isSelf ? 'self' : 'contact',
+          senderUid: msg.senderUid,
+          senderName: msg.senderName || null,
+          content: msg.content || '',
+          contentType: msg.contentType || 'text',
+          attachments: msg.attachments ?? [],
+          sentAt,
+        },
+      });
+    } catch (err: any) {
+      // P2002 = unique constraint violation → duplicate zaloMsgId, skip silently
+      if (err?.code === 'P2002') {
+        logger.debug(`[message-handler] Skipping duplicate zaloMsgId=${msg.msgId}`);
+        return null;
+      }
+      throw err;
+    }
 
     await updateConversationAfterMessage(conversation.id, sentAt, msg.isSelf);
 
@@ -91,6 +102,16 @@ export async function handleIncomingMessage(
         where: { id: contactId, firstContactDate: null },
         data: { firstContactDate: new Date(msg.timestamp) },
       }).catch(() => {});
+    }
+
+    // Skip webhooks and automation for backfilled messages (old_messages / sync)
+    if (msg.isBackfill) {
+      return {
+        message,
+        conversationId: conversation.id,
+        orgId: account.orgId,
+        contactId,
+      };
     }
 
     // Emit webhook for message event (fire-and-forget)

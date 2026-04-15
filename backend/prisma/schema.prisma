@@ -67,6 +67,7 @@ model User {
   appointments     Appointment[]
   repliedMessages  Message[]           @relation("RepliedMessages")
   activityLogs     ActivityLog[]
+  messageTemplates MessageTemplate[]
 
   @@map("users")
 }
@@ -166,6 +167,8 @@ model Conversation {
   aiSuggestions AiSuggestion[]
 
   @@unique([zaloAccountId, externalThreadId])
+  @@index([orgId, zaloAccountId, isReplied, lastMessageAt])
+  @@index([orgId, zaloAccountId, lastMessageAt])
   @@map("conversations")
 }
 
@@ -189,6 +192,7 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   repliedBy    User?        @relation("RepliedMessages", fields: [repliedByUserId], references: [id])
 
+  @@unique([conversationId, zaloMsgId])
   @@map("messages")
 }
 
@@ -352,16 +356,19 @@ model AutomationRule {
 }
 
 model MessageTemplate {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
-  name      String
-  content   String
-  category  String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  ownerUserId String?  @map("owner_user_id")
+  name        String
+  content     String
+  category    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner User?        @relation(fields: [ownerUserId], references: [id])
 
+  @@index([orgId, ownerUserId])
   @@index([orgId, category])
   @@map("message_templates")
 }

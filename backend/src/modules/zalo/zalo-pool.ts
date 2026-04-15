@@ -12,11 +12,12 @@ import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 import { attachZaloListener, type UserInfoCacheEntry } from './zalo-listener-factory.js';
 import { emitWebhook } from '../api/webhook-service.js';
+import { startMessageSync, stopMessageSync } from './zalo-message-sync.js';
 
 // zca-js has no reliable ESM type exports — load via CJS interop
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { Zalo } = require('zca-js') as { Zalo: new (opts: { logging: boolean }) => any };
+const { Zalo } = require('zca-js') as { Zalo: new (opts: { logging: boolean; selfListen?: boolean }) => any };
 
 interface ZaloCredentials {
   cookie: any;
@@ -47,7 +48,7 @@ class ZaloAccountPool {
 
   // Initiate QR-based login; emits QR events to frontend via Socket.IO
   async loginQR(accountId: string): Promise<void> {
-    const zalo = new Zalo({ logging: false });
+    const zalo = new Zalo({ logging: false, selfListen: true });
     this.instances.set(accountId, { zalo, api: null, status: 'qr_pending', lastActivity: new Date() });
 
     try {
@@ -115,7 +116,7 @@ class ZaloAccountPool {
 
   // Reconnect using previously saved session credentials
   async reconnect(accountId: string, credentials: ZaloCredentials): Promise<void> {
-    const zalo = new Zalo({ logging: false });
+    const zalo = new Zalo({ logging: false, selfListen: true });
     this.instances.set(accountId, { zalo, api: null, status: 'connecting', lastActivity: new Date() });
 
     try {
@@ -171,6 +172,7 @@ class ZaloAccountPool {
         const inst = this.instances.get(id);
         if (inst) inst.status = 'disconnected';
         this.updateAccountDB(id, 'disconnected', null);
+        stopMessageSync(id);
         // Emit webhook for disconnect (fire-and-forget)
         prisma.zaloAccount.findUnique({ where: { id }, select: { orgId: true } })
           .then((rec) => rec && emitWebhook(rec.orgId, 'zalo.disconnected', { accountId: id }))
@@ -196,6 +198,9 @@ class ZaloAccountPool {
         setTimeout(() => this.autoReconnect(id), 30_000);
       },
     });
+
+    // Start periodic group message sync backup
+    startMessageSync(api, accountId);
   }
 
   // Persist session credentials to DB
@@ -255,6 +260,7 @@ class ZaloAccountPool {
         logger.warn(`[zalo:${accountId}] Error stopping listener:`, err);
       }
     }
+    stopMessageSync(accountId);
     this.instances.delete(accountId);
   }
 

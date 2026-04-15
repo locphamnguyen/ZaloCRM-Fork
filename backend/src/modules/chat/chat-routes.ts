@@ -17,10 +17,48 @@ type QueryParams = Record<string, string>;
 export async function chatRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware);
 
-  // ── List conversations (paginated) ──────────────────────────────────────
+  // ── Conversation filter counts (unread, unreplied, total) ───────────────
+  // NOTE: Must be registered BEFORE /api/v1/conversations/:id to avoid route conflict
+  app.get('/api/v1/conversations/counts', async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user!;
+    const { accountId = '' } = request.query as QueryParams;
+
+    const baseWhere: any = { orgId: user.orgId };
+    if (accountId) baseWhere.zaloAccountId = accountId;
+
+    // Members can only see conversations from Zalo accounts they have access to
+    if (user.role === 'member') {
+      const accessibleAccounts = await prisma.zaloAccountAccess.findMany({
+        where: { userId: user.id },
+        select: { zaloAccountId: true },
+      });
+      baseWhere.zaloAccountId = { in: accessibleAccounts.map((a) => a.zaloAccountId) };
+    }
+
+    const [unread, unreplied, total] = await Promise.all([
+      prisma.conversation.count({ where: { ...baseWhere, unreadCount: { gt: 0 } } }),
+      prisma.conversation.count({ where: { ...baseWhere, isReplied: false } }),
+      prisma.conversation.count({ where: baseWhere }),
+    ]);
+
+    return { unread, unreplied, total };
+  });
+
+  // ── List conversations (paginated, filterable) ──────────────────────────
   app.get('/api/v1/conversations', async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user!;
-    const { page = '1', limit = '50', search = '', accountId = '' } = request.query as QueryParams;
+    const {
+      page = '1',
+      limit = '50',
+      search = '',
+      accountId = '',
+      // Filter params
+      unread = '',
+      unreplied = '',
+      from = '',
+      to = '',
+      tags = '',
+    } = request.query as QueryParams;
 
     const where: any = { orgId: user.orgId };
     if (accountId) where.zaloAccountId = accountId;
@@ -31,6 +69,33 @@ export async function chatRoutes(app: FastifyInstance) {
           { phone: { contains: search } },
         ],
       };
+    }
+
+    // Advanced filters
+    if (unread === 'true') where.unreadCount = { gt: 0 };
+    if (unreplied === 'true') where.isReplied = false;
+    if (from || to) {
+      where.lastMessageAt = {};
+      if (from) {
+        const d = new Date(from);
+        if (!isNaN(d.getTime())) where.lastMessageAt.gte = d;
+      }
+      if (to) {
+        const d = new Date(to);
+        if (!isNaN(d.getTime())) where.lastMessageAt.lte = d;
+      }
+      // Remove empty filter if both dates invalid
+      if (Object.keys(where.lastMessageAt).length === 0) delete where.lastMessageAt;
+    }
+    if (tags) {
+      const tagList = tags.split(',').map((t) => t.trim()).filter(Boolean);
+      if (tagList.length > 0) {
+        // Merge with any existing contact filter from search
+        where.contact = {
+          ...where.contact,
+          tags: { array_contains: tagList },
+        };
+      }
     }
 
     // Members can only see conversations from Zalo accounts they have access to
@@ -55,13 +120,13 @@ export async function chatRoutes(app: FastifyInstance) {
           },
         },
         orderBy: { lastMessageAt: 'desc' },
-        skip: (parseInt(page) - 1) * parseInt(limit),
-        take: parseInt(limit),
+        skip: (parseInt(page) - 1) * Math.min(parseInt(limit), 200),
+        take: Math.min(parseInt(limit), 200),
       }),
       prisma.conversation.count({ where }),
     ]);
 
-    return { conversations, total, page: parseInt(page), limit: parseInt(limit) };
+    return { conversations, total, page: parseInt(page), limit: Math.min(parseInt(limit), 200) };
   });
 
   // ── Get single conversation ──────────────────────────────────────────────

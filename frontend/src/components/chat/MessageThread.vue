@@ -64,7 +64,7 @@
               <div v-else-if="msg.contentType === 'video'">🎥 Video</div>
               <div v-else-if="msg.contentType === 'voice'">🎤 Tin nhắn thoại</div>
               <div v-else-if="msg.contentType === 'gif'">GIF</div>
-              <!-- Reminder/Calendar -->
+              <!-- Reminder/Calendar (legacy inline renderer kept for backward compat) -->
               <div v-else-if="isReminderMessage(msg)" class="reminder-card">
                 <div class="d-flex align-center mb-1">
                   <v-icon size="16" color="warning" class="mr-1">mdi-calendar-clock</v-icon>
@@ -78,6 +78,12 @@
                   Đồng bộ lịch
                 </v-btn>
               </div>
+              <!-- Special message types (bank_transfer, call, qr_code, poll, note, forwarded, rich) -->
+              <SpecialMessageRenderer
+                v-else-if="isSpecialType(msg.contentType)"
+                :type="msg.contentType"
+                :content="parseContent(msg.content)"
+              />
               <!-- Default text -->
               <div v-else>{{ parseDisplayContent(msg.content) }}</div>
               <!-- Timestamp -->
@@ -99,9 +105,33 @@
           @generate="$emit('ask-ai')"
           @apply="applySuggestion"
         />
-        <div class="d-flex align-end">
-          <v-textarea v-model="inputText" placeholder="Nhập tin nhắn..." variant="solo-filled" density="compact" hide-details auto-grow rows="1" max-rows="3" @keydown.enter.exact.prevent="handleSend" class="flex-grow-1 mr-2" />
-          <v-btn icon color="primary" :loading="sending" :disabled="!inputText.trim()" @click="handleSend"><v-icon>mdi-send</v-icon></v-btn>
+        <div class="d-flex align-end" style="position: relative;">
+          <QuickTemplatePopup
+            ref="popupRef"
+            :visible="showTemplatePopup"
+            :query="templateQuery"
+            :templates="templates"
+            :contact="conversation.contact"
+            @select="onTemplateSelect"
+            @close="showTemplatePopup = false"
+          />
+          <v-textarea
+            v-model="inputText"
+            placeholder="Nhập tin nhắn... (gõ / để chèn mẫu)"
+            variant="solo-filled"
+            density="compact"
+            hide-details
+            auto-grow
+            rows="1"
+            max-rows="3"
+            class="flex-grow-1 mr-2"
+            @input="onInput"
+            @keydown="onInputKeydown"
+            @keydown.enter.exact.prevent="handleSend"
+          />
+          <v-btn icon color="primary" :loading="sending" :disabled="!inputText.trim()" @click="handleSend">
+            <v-icon>mdi-send</v-icon>
+          </v-btn>
         </div>
       </div>
     </template>
@@ -120,10 +150,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue';
+import { ref, watch, nextTick, computed, onMounted } from 'vue';
 import type { Conversation, Message } from '@/composables/use-chat';
 import { api } from '@/api/index';
 import AiSuggestionPanel from '@/components/ai/ai-suggestion-panel.vue';
+import SpecialMessageRenderer from '@/components/chat/special-message-renderer.vue';
+import QuickTemplatePopup from '@/components/chat/quick-template-popup.vue';
+
+interface TemplateItem {
+  id: string;
+  name: string;
+  content: string;
+  category: string | null;
+  isPersonal: boolean;
+}
 
 const props = defineProps<{
   conversation: Conversation | null;
@@ -144,7 +184,77 @@ const previewImageUrl = ref('');
 const showImagePreview = computed({ get: () => !!previewImageUrl.value, set: (v) => { if (!v) previewImageUrl.value = ''; } });
 const syncSnack = ref({ show: false, text: '', color: 'success' });
 
-function handleSend() { if (!inputText.value.trim()) return; emit('send', inputText.value); inputText.value = ''; }
+// Content types handled by SpecialMessageRenderer
+const SPECIAL_TYPES = new Set([
+  'bank_transfer', 'call', 'qr_code', 'reminder', 'poll', 'note', 'forwarded', 'rich',
+]);
+
+function isSpecialType(contentType: string | null | undefined): boolean {
+  return !!contentType && SPECIAL_TYPES.has(contentType);
+}
+
+/** Safely parse JSON content for SpecialMessageRenderer; returns raw string on failure. */
+function parseContent(content: string | null): unknown {
+  if (!content) return null;
+  try { return JSON.parse(content); } catch { return content; }
+}
+
+// --- Template quick-insert ---
+const showTemplatePopup = ref(false);
+const templateQuery = ref('');
+const templates = ref<TemplateItem[]>([]);
+const popupRef = ref<InstanceType<typeof QuickTemplatePopup> | null>(null);
+
+async function loadTemplates() {
+  try {
+    const res = await api.get<{ templates: TemplateItem[] }>('/automation/templates');
+    templates.value = res.data.templates;
+  } catch {
+    // Non-critical — popup shows empty list on failure
+  }
+}
+
+onMounted(() => { loadTemplates(); });
+
+/** Detect `/` trigger: at start of input or immediately after a space */
+function onInput(e: Event) {
+  const value = (e.target as HTMLTextAreaElement).value;
+  if (value === '/' || /\s\/$/.test(value)) {
+    showTemplatePopup.value = true;
+    templateQuery.value = '';
+  } else if (showTemplatePopup.value) {
+    const lastSlash = value.lastIndexOf('/');
+    if (lastSlash === -1) {
+      showTemplatePopup.value = false;
+    } else {
+      templateQuery.value = value.slice(lastSlash + 1);
+    }
+  }
+}
+
+/** Forward arrow/enter/escape keys to popup when open */
+function onInputKeydown(e: KeyboardEvent) {
+  if (!showTemplatePopup.value) return;
+  if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) {
+    popupRef.value?.onKey(e);
+  }
+}
+
+function onTemplateSelect(rendered: string) {
+  const lastSlash = inputText.value.lastIndexOf('/');
+  inputText.value = lastSlash >= 0 ? inputText.value.slice(0, lastSlash) + rendered : rendered;
+  showTemplatePopup.value = false;
+  templateQuery.value = '';
+}
+// --- End template quick-insert ---
+
+function handleSend() {
+  if (showTemplatePopup.value) { showTemplatePopup.value = false; return; }
+  if (!inputText.value.trim()) return;
+  emit('send', inputText.value);
+  inputText.value = '';
+}
+
 function applySuggestion() { if (!props.aiSuggestion) return; inputText.value = props.aiSuggestion; }
 function formatMessageTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
 function openFile(url: string) { window.open(url, '_blank'); }
@@ -232,8 +342,9 @@ async function syncAppointment(msg: Message) {
       notes: `[Zalo] ${p.title || ''}`,
     });
     syncSnack.value = { show: true, text: 'Đã đồng bộ lịch hẹn thành công!', color: 'success' };
-  } catch (err: any) {
-    syncSnack.value = { show: true, text: err.response?.data?.error || 'Đồng bộ thất bại', color: 'error' };
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { error?: string } } };
+    syncSnack.value = { show: true, text: e.response?.data?.error || 'Đồng bộ thất bại', color: 'error' };
   }
 }
 
