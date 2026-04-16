@@ -29,6 +29,8 @@ model Organization {
   messageTemplates MessageTemplate[]
   aiConfig      AiConfig?
   aiSuggestions AiSuggestion[]
+  pinnedConversations PinnedConversation[]
+  groupPolls          GroupPoll[]
 
   @@map("organizations")
 }
@@ -167,6 +169,7 @@ model Conversation {
   contact       Contact?      @relation(fields: [contactId], references: [id])
   messages      Message[]
   aiSuggestions AiSuggestion[]
+  pins          PinnedConversation[]
 
   @@unique([zaloAccountId, externalThreadId])
   @@index([orgId, zaloAccountId, isReplied, lastMessageAt])
@@ -194,6 +197,7 @@ model Message {
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   repliedBy    User?        @relation("RepliedMessages", fields: [repliedByUserId], references: [id])
+  reactions    MessageReaction[]
 
   @@unique([conversationId, zaloMsgId])
   @@map("messages")
@@ -409,4 +413,57 @@ model AiSuggestion {
   @@index([conversationId, createdAt])
   @@index([orgId, type, createdAt])
   @@map("ai_suggestions")
+}
+
+// ── Ported from openzca ────────────────────────────────────────────────────
+
+// Emoji reaction on a message (ported from openzca msg react)
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  reactorId String   @map("reactor_id") // Zalo UID of the person who reacted
+  emoji     String   // ❤️ 👍 😆 😮 😭 😡
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, reactorId])
+  @@map("message_reactions")
+}
+
+// Pinned conversation (ported from openzca msg pin)
+model PinnedConversation {
+  id             String   @id @default(uuid())
+  orgId          String   @map("org_id")
+  zaloAccountId  String   @map("zalo_account_id")
+  conversationId String   @map("conversation_id")
+  pinnedAt       DateTime @default(now()) @map("pinned_at")
+
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([zaloAccountId, conversationId])
+  @@map("pinned_conversations")
+}
+
+// Group poll (ported from openzca group poll)
+model GroupPoll {
+  id               String    @id @default(uuid())
+  orgId            String    @map("org_id")
+  zaloAccountId    String    @map("zalo_account_id")
+  groupExternalId  String    @map("group_external_id")
+  zaloPollId       String    @map("zalo_poll_id")
+  question         String
+  options          Json      @default("[]") // [{id, text, voteCount}]
+  isMultiChoice    Boolean   @default(false) @map("is_multi_choice")
+  isAnonymous      Boolean   @default(false) @map("is_anonymous")
+  isLocked         Boolean   @default(false) @map("is_locked")
+  expiresAt        DateTime? @map("expires_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([zaloAccountId, zaloPollId])
+  @@index([orgId, groupExternalId])
+  @@map("group_polls")
 }
