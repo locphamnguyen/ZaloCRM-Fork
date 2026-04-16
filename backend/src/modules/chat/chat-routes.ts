@@ -200,12 +200,15 @@ export async function chatRoutes(app: FastifyInstance) {
       const threadType = conversation.threadType === 'group' ? 1 : 0;
 
       zaloRateLimiter.recordSend(conversation.zaloAccountId);
-      await instance.api.sendMessage({ msg: content }, threadId, threadType);
+      const sendResult = await instance.api.sendMessage({ msg: content }, threadId, threadType);
+      // Extract zaloMsgId from sendMessage response for dedup with selfListen
+      const zaloMsgId = String(sendResult?.msgId || sendResult?.data?.msgId || '');
 
       const message = await prisma.message.create({
         data: {
           id: randomUUID(),
           conversationId: id,
+          zaloMsgId: zaloMsgId || null,
           senderType: 'self',
           senderUid: conversation.zaloAccount.zaloUid || '',
           senderName: 'Staff',

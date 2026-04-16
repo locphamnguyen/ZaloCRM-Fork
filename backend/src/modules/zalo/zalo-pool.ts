@@ -106,6 +106,11 @@ class ZaloAccountPool {
       prisma.zaloAccount.findUnique({ where: { id: accountId }, select: { orgId: true } })
         .then((rec) => rec && emitWebhook(rec.orgId, 'zalo.connected', { accountId }))
         .catch(() => {});
+
+      // Fire-and-forget: link orphaned conversations on login
+      this.backfillOrphanedConversations(accountId, api).catch((err) => {
+        logger.warn(`[zalo:${accountId}] Backfill orphaned conversations failed:`, err);
+      });
     } catch (err) {
       const instance = this.instances.get(accountId);
       if (instance) instance.status = 'disconnected';
@@ -153,6 +158,11 @@ class ZaloAccountPool {
       prisma.zaloAccount.findUnique({ where: { id: accountId }, select: { orgId: true } })
         .then((rec) => rec && emitWebhook(rec.orgId, 'zalo.connected', { accountId }))
         .catch(() => {});
+
+      // Fire-and-forget: link orphaned conversations on reconnect
+      this.backfillOrphanedConversations(accountId, api).catch((err) => {
+        logger.warn(`[zalo:${accountId}] Backfill orphaned conversations failed:`, err);
+      });
     } catch (err) {
       const instance = this.instances.get(accountId);
       if (instance) instance.status = 'disconnected';
@@ -282,6 +292,71 @@ class ZaloAccountPool {
 
   getInstance(accountId: string): ZaloInstance | undefined {
     return this.instances.get(accountId);
+  }
+
+  // Link orphaned conversations (contactId is null) to contacts via Zalo API
+  private async backfillOrphanedConversations(accountId: string, api: any): Promise<void> {
+    const account = await prisma.zaloAccount.findUnique({
+      where: { id: accountId },
+      select: { orgId: true },
+    });
+    if (!account) return;
+
+    const orphaned = await prisma.conversation.findMany({
+      where: { zaloAccountId: accountId, contactId: null, threadType: 'user' },
+      select: { id: true, externalThreadId: true },
+    });
+
+    if (orphaned.length === 0) return;
+    logger.info(`[zalo:${accountId}] Backfilling ${orphaned.length} orphaned conversation(s)`);
+
+    for (const conv of orphaned) {
+      const uid = conv.externalThreadId;
+      if (!uid) continue;
+
+      let contact = await prisma.contact.findFirst({
+        where: { zaloUid: uid, orgId: account.orgId },
+        select: { id: true },
+      });
+
+      if (!contact) {
+        let zaloName = '';
+        let avatar = '';
+        let phone = '';
+        try {
+          const result = await api.getUserInfo(uid);
+          const profiles = result?.changed_profiles || {};
+          const profile = profiles[uid] || profiles[`${uid}_0`];
+          if (profile) {
+            zaloName = profile.zaloName || profile.zalo_name || profile.displayName || profile.display_name || '';
+            avatar = profile.avatar || '';
+            phone = profile.phoneNumber || '';
+          }
+        } catch (err) {
+          logger.warn(`[zalo:${accountId}] getUserInfo failed for ${uid}:`, err);
+        }
+
+        const { randomUUID } = await import('node:crypto');
+        contact = await prisma.contact.create({
+          data: {
+            id: randomUUID(),
+            orgId: account.orgId,
+            zaloUid: uid,
+            fullName: zaloName || 'Unknown',
+            avatarUrl: avatar || null,
+            phone: phone || null,
+          },
+          select: { id: true },
+        });
+      }
+
+      await prisma.conversation.update({
+        where: { id: conv.id },
+        data: { contactId: contact.id },
+      });
+    }
+
+    logger.info(`[zalo:${accountId}] Backfill complete: ${orphaned.length} conversation(s) linked`);
   }
 }
 

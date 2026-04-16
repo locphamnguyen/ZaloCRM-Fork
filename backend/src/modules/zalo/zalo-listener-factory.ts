@@ -94,10 +94,17 @@ export function attachZaloListener(ctx: ListenerContext): void {
 
       // Resolve display name — prefer zaloName from API over dName
       let senderName: string = message.data?.dName || '';
-      if (!message.isSelf && senderUid && api.getUserInfo) {
-        const userInfo = await resolveZaloName(api, senderUid, userInfoCache);
-        if (userInfo.zaloName) senderName = userInfo.zaloName;
-        if (userInfo.avatar) updateContactAvatar(senderUid, userInfo.avatar);
+      if (senderUid && api.getUserInfo) {
+        // For self messages, resolve recipient name using threadId
+        // For contact messages, resolve sender name using senderUid
+        const resolveUid = message.isSelf ? (message.threadId || '') : senderUid;
+        if (resolveUid) {
+          const userInfo = await resolveZaloName(api, resolveUid, userInfoCache);
+          if (!message.isSelf) {
+            if (userInfo.zaloName) senderName = userInfo.zaloName;
+            if (userInfo.avatar) updateContactAvatar(senderUid, userInfo.avatar);
+          }
+        }
       }
 
       // Resolve group name for group threads

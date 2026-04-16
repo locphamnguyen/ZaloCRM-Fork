@@ -74,7 +74,7 @@ async function syncGroupMessages(api: any, accountId: string): Promise<number> {
           msgId: zaloMsgId,
           timestamp: parseInt(msg.data?.ts || String(Date.now())),
           isSelf: msg.isSelf || false,
-          threadId: conv.externalThreadId,
+          threadId: conv.externalThreadId!,
           threadType: 'group',
           attachments: [],
           isBackfill: true,

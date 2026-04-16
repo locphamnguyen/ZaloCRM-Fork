@@ -69,6 +69,32 @@ export async function handleIncomingMessage(
     const conversation = await findOrCreateConversation(msg, account.orgId, contactId);
 
     const sentAt = new Date(msg.timestamp);
+
+    // Dedup guard for self messages: if a self message with same content exists
+    // in the last 30 seconds, this is likely a selfListen echo of a CRM-sent message
+    if (msg.isSelf && msg.msgId) {
+      const recentDupe = await prisma.message.findFirst({
+        where: {
+          conversationId: conversation.id,
+          senderType: 'self',
+          content: msg.content || '',
+          sentAt: { gte: new Date(Date.now() - 30_000) },
+        },
+        select: { id: true, zaloMsgId: true },
+      });
+      if (recentDupe) {
+        // If the existing record has no zaloMsgId, backfill it for future dedup
+        if (!recentDupe.zaloMsgId && msg.msgId) {
+          await prisma.message.update({
+            where: { id: recentDupe.id },
+            data: { zaloMsgId: msg.msgId },
+          }).catch(() => {});
+        }
+        logger.debug(`[message-handler] Skipping self echo: content match within 30s`);
+        return null;
+      }
+    }
+
     let message;
     try {
       message = await prisma.message.create({
@@ -202,11 +228,12 @@ async function upsertContact(msg: IncomingMessage, orgId: string): Promise<strin
     return groupContact.id;
   }
 
-  // User messages: self messages don't create a contact
-  if (msg.isSelf) return null;
+  // For self messages on user threads, the contact is the thread recipient (threadId = contact UID)
+  const contactUid = msg.isSelf ? msg.threadId : msg.senderUid;
+  const contactName = msg.isSelf ? '' : msg.senderName; // self msgs don't carry recipient name
 
   let contact = await prisma.contact.findFirst({
-    where: { zaloUid: msg.senderUid, orgId },
+    where: { zaloUid: contactUid, orgId },
     select: { id: true, fullName: true },
   });
 
@@ -215,17 +242,18 @@ async function upsertContact(msg: IncomingMessage, orgId: string): Promise<strin
       data: {
         id: randomUUID(),
         orgId,
-        zaloUid: msg.senderUid,
-        fullName: msg.senderName || 'Unknown',
+        zaloUid: contactUid,
+        fullName: contactName || 'Unknown',
       },
       select: { id: true, fullName: true },
     });
     // Emit webhook for new contact created
     emitWebhook(orgId, 'contact.created', { contactId: contact.id, fullName: contact.fullName });
-  } else if (msg.senderName && contact.fullName !== msg.senderName) {
+  } else if (contactName && contact.fullName !== contactName && contact.fullName === 'Unknown') {
+    // Update name only if currently "Unknown" — don't overwrite user-edited names
     await prisma.contact.update({
       where: { id: contact.id },
-      data: { fullName: msg.senderName },
+      data: { fullName: contactName },
     });
   }
 
