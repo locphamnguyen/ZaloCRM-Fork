@@ -23,6 +23,7 @@ export function useChatContactPanel(
 
   const form = reactive({
     fullName: '',
+    crmName: '',
     phone: '',
     email: '',
     source: null as string | null,
@@ -35,6 +36,7 @@ export function useChatContactPanel(
 
   function populateForm(c: Contact) {
     form.fullName = c.fullName ?? '';
+    form.crmName = c.crmName ?? '';
     form.phone = c.phone ?? '';
     form.email = c.email ?? '';
     form.source = c.source ?? null;
@@ -84,6 +86,7 @@ export function useChatContactPanel(
 
     const result = await updateContact(contactId, {
       fullName: form.fullName || null,
+      crmName: form.crmName || null,
       phone: form.phone || null,
       email: form.email || null,
       source: form.source || null,

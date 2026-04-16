@@ -21,10 +21,11 @@ export async function chatRoutes(app: FastifyInstance) {
   // NOTE: Must be registered BEFORE /api/v1/conversations/:id to avoid route conflict
   app.get('/api/v1/conversations/counts', async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user!;
-    const { accountId = '' } = request.query as QueryParams;
+    const { accountId = '', tab = '' } = request.query as QueryParams;
 
     const baseWhere: any = { orgId: user.orgId };
     if (accountId) baseWhere.zaloAccountId = accountId;
+    if (tab) baseWhere.tab = tab;
 
     // Members can only see conversations from Zalo accounts they have access to
     if (user.role === 'member') {
@@ -32,7 +33,13 @@ export async function chatRoutes(app: FastifyInstance) {
         where: { userId: user.id },
         select: { zaloAccountId: true },
       });
-      baseWhere.zaloAccountId = { in: accessibleAccounts.map((a) => a.zaloAccountId) };
+      const accessibleIds = accessibleAccounts.map((a) => a.zaloAccountId);
+      // Intersect with user-selected account filter if present
+      if (accountId && accessibleIds.includes(accountId)) {
+        baseWhere.zaloAccountId = accountId;
+      } else {
+        baseWhere.zaloAccountId = { in: accessibleIds };
+      }
     }
 
     const [unread, unreplied, total] = await Promise.all([
@@ -58,14 +65,17 @@ export async function chatRoutes(app: FastifyInstance) {
       from = '',
       to = '',
       tags = '',
+      tab = '',
     } = request.query as QueryParams;
 
     const where: any = { orgId: user.orgId };
+    if (tab) where.tab = tab;
     if (accountId) where.zaloAccountId = accountId;
     if (search) {
       where.contact = {
         OR: [
           { fullName: { contains: search, mode: 'insensitive' } },
+          { crmName: { contains: search, mode: 'insensitive' } },
           { phone: { contains: search } },
         ],
       };
@@ -104,14 +114,19 @@ export async function chatRoutes(app: FastifyInstance) {
         where: { userId: user.id },
         select: { zaloAccountId: true },
       });
-      where.zaloAccountId = { in: accessibleAccounts.map((a) => a.zaloAccountId) };
+      const accessibleIds = accessibleAccounts.map((a) => a.zaloAccountId);
+      if (accountId && accessibleIds.includes(accountId)) {
+        where.zaloAccountId = accountId;
+      } else {
+        where.zaloAccountId = { in: accessibleIds };
+      }
     }
 
     const [conversations, total] = await Promise.all([
       prisma.conversation.findMany({
         where,
         include: {
-          contact: { select: { id: true, fullName: true, phone: true, avatarUrl: true, zaloUid: true } },
+          contact: { select: { id: true, fullName: true, crmName: true, phone: true, avatarUrl: true, zaloUid: true } },
           zaloAccount: { select: { id: true, displayName: true, zaloUid: true } },
           messages: {
             take: 1,
@@ -245,5 +260,24 @@ export async function chatRoutes(app: FastifyInstance) {
     });
 
     return { success: true };
+  });
+
+  // ── Move conversation to a different tab (main / other) ────────────────
+  app.patch('/api/v1/conversations/:id/tab', { preHandler: requireZaloAccess('chat') }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user!;
+    const { id } = request.params as { id: string };
+    const { tab } = request.body as { tab: string };
+
+    if (!tab || !['main', 'other'].includes(tab)) {
+      return reply.status(400).send({ error: 'tab must be "main" or "other"' });
+    }
+
+    const updated = await prisma.conversation.updateMany({
+      where: { id, orgId: user.orgId },
+      data: { tab },
+    });
+
+    if (updated.count === 0) return reply.status(404).send({ error: 'Conversation not found' });
+    return { success: true, tab };
   });
 }

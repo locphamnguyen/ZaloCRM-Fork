@@ -3,6 +3,7 @@ export interface AutomationTemplateContext {
   contact?: {
     id: string;
     fullName: string | null;
+    crmName?: string | null;
     phone: string | null;
     email?: string | null;
     status: string | null;
@@ -18,6 +19,7 @@ const TEMPLATE_VARIABLES: Record<string, (context: AutomationTemplateContext) =>
   'contact.phone': (ctx) => ctx.contact?.phone ?? '',
   'contact.email': (ctx) => ctx.contact?.email ?? '',
   'contact.status': (ctx) => ctx.contact?.status ?? '',
+  'contact.crmName': (ctx) => ctx.contact?.crmName ?? ctx.contact?.fullName ?? '',
   'contact.zaloName': (ctx) => ctx.contact?.zaloName ?? ctx.contact?.fullName ?? '',
   'contact.tags': (ctx) => {
     const tags = ctx.contact?.tags;

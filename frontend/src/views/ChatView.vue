@@ -10,6 +10,8 @@
         v-model:search="searchQuery"
         @select="selectConversation"
         @filter-account="onFilterAccount"
+        @update:filters="onFiltersUpdate"
+        @conversation-moved="onConversationMoved"
       />
       <!-- Resize handle -->
       <div class="resize-handle" @mousedown="startResize('left', $event)" />
@@ -63,7 +65,7 @@ const { isMobile } = useMobile();
 
 const {
   conversations, selectedConvId, selectedConv, messages,
-  loadingConvs, loadingMsgs, sendingMsg, searchQuery, accountFilter,
+  loadingConvs, loadingMsgs, sendingMsg, searchQuery, accountFilter, extraFilters,
   aiSuggestion, aiSuggestionLoading, aiSuggestionError,
   aiSummary, aiSummaryLoading, aiSentiment, aiSentimentLoading,
   fetchConversations, fetchAiConfig, selectConversation, sendMessage,
@@ -73,6 +75,15 @@ const {
 
 function onFilterAccount(id: string | null) {
   accountFilter.value = id;
+  fetchConversations();
+}
+
+function onFiltersUpdate(params: Record<string, string>) {
+  extraFilters.value = params;
+  fetchConversations();
+}
+
+function onConversationMoved(_id: string, _tab: string) {
   fetchConversations();
 }
 

@@ -118,6 +118,7 @@ model Contact {
   phone            String?
   email            String?   @map("email")
   fullName         String?   @map("full_name")
+  crmName          String?   @map("crm_name")
   avatarUrl        String?   @map("avatar_url")
   source           String?   // FB, TT, GT, CN, etc.
   sourceDate       DateTime? @map("source_date")
@@ -158,6 +159,7 @@ model Conversation {
   lastMessageAt    DateTime? @map("last_message_at")
   unreadCount      Int       @default(0) @map("unread_count")
   isReplied        Boolean   @default(true) @map("is_replied")
+  tab              String    @default("main") @map("tab") // main, other
   createdAt        DateTime  @default(now()) @map("created_at")
 
   org           Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -169,6 +171,7 @@ model Conversation {
   @@unique([zaloAccountId, externalThreadId])
   @@index([orgId, zaloAccountId, isReplied, lastMessageAt])
   @@index([orgId, zaloAccountId, lastMessageAt])
+  @@index([orgId, tab, lastMessageAt])
   @@map("conversations")
 }
 

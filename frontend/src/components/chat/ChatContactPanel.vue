@@ -28,7 +28,10 @@
         </span>
       </div>
 
-      <v-text-field v-model="form.fullName" label="Họ tên" density="compact" variant="outlined" class="mb-2" hide-details />
+      <v-text-field v-model="form.crmName" label="Tên CRM (tên thật)" density="compact" variant="outlined" class="mb-2" hide-details
+        hint="Tên chuẩn hóa dùng cho automation, VD: Nguyễn Văn Hải" persistent-hint />
+      <v-text-field v-model="form.fullName" label="Tên hiển thị Zalo" density="compact" variant="outlined" class="mb-2" hide-details
+        hint="Tên gợi nhớ trên Zalo, VD: Hải - Quan tâm 2PN" persistent-hint />
       <v-text-field v-model="form.phone" label="Số điện thoại" density="compact" variant="outlined" class="mb-2" hide-details />
       <v-text-field v-model="form.email" label="Email" type="email" density="compact" variant="outlined" class="mb-2" hide-details />
 

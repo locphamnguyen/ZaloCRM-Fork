@@ -11,9 +11,14 @@
 
       <v-card-text>
         <v-row dense>
-          <!-- Full name -->
+          <!-- CRM name (real name) -->
           <v-col cols="12" sm="6">
-            <v-text-field v-model="form.fullName" label="Họ và tên" :rules="[required]" />
+            <v-text-field v-model="form.crmName" label="Tên CRM (tên thật)" hint="Dùng cho automation" persistent-hint />
+          </v-col>
+
+          <!-- Full name (Zalo display name) -->
+          <v-col cols="12" sm="6">
+            <v-text-field v-model="form.fullName" label="Tên hiển thị Zalo" :rules="[required]" />
           </v-col>
 
           <!-- Phone -->
@@ -140,6 +145,7 @@ const isNew = computed(() => !props.contact?.id);
 
 interface FormState {
   fullName: string;
+  crmName: string;
   phone: string;
   email: string;
   source: string;
@@ -155,6 +161,7 @@ const form = ref<FormState>(emptyForm());
 function emptyForm(): FormState {
   return {
     fullName: '',
+    crmName: '',
     phone: '',
     email: '',
     source: '',
@@ -170,6 +177,7 @@ watch(() => props.contact, (c) => {
   if (c) {
     form.value = {
       fullName: c.fullName ?? '',
+      crmName: c.crmName ?? '',
       phone: c.phone ?? '',
       email: c.email ?? '',
       source: c.source ?? '',
@@ -195,6 +203,7 @@ function required(v: string) {
 async function onSave() {
   const payload: Partial<Contact> = {
     fullName: form.value.fullName || null,
+    crmName: form.value.crmName || null,
     phone: form.value.phone || null,
     email: form.value.email || null,
     source: form.value.source || null,

@@ -27,6 +27,14 @@
       />
     </div>
 
+    <!-- Tab switcher: Main / Other -->
+    <div class="d-flex px-2 pb-1">
+      <v-btn-toggle v-model="activeTab" mandatory density="compact" color="primary" class="w-100">
+        <v-btn value="main" size="small" class="flex-grow-1">Chính</v-btn>
+        <v-btn value="other" size="small" class="flex-grow-1">Khác</v-btn>
+      </v-btn-toggle>
+    </div>
+
     <!-- Filter bar -->
     <div class="d-flex flex-wrap gap-1 px-2 pb-2">
       <v-chip
@@ -168,6 +176,7 @@
         :key="conv.id"
         :active="conv.id === selectedId"
         @click="$emit('select', conv.id)"
+        @contextmenu.prevent="openContextMenu($event, conv)"
         class="py-2"
         :class="{ 'conversation-active': conv.id === selectedId, 'bg-blue-lighten-5': conv.unreadCount > 0 && conv.id !== selectedId }"
       >
@@ -181,7 +190,7 @@
 
         <v-list-item-title class="d-flex align-center">
           <span class="text-truncate" :class="{ 'font-weight-bold': conv.unreadCount > 0 }">
-            {{ conv.threadType === 'group' ? (conv.contact?.fullName || 'Nhóm') : (conv.contact?.fullName || 'Unknown') }}
+            {{ conv.threadType === 'group' ? (conv.contact?.fullName || 'Nhóm') : (conv.contact?.crmName || conv.contact?.fullName || 'Unknown') }}
           </span>
           <v-chip v-if="conv.threadType === 'group'" size="x-small" color="info" variant="tonal" class="ml-1">Nhóm</v-chip>
           <v-spacer />
@@ -214,6 +223,30 @@
         Chưa có cuộc trò chuyện nào
       </div>
     </v-list>
+
+    <!-- Context menu for tab actions -->
+    <v-menu
+      v-model="contextMenu.show"
+      :target="[contextMenu.x, contextMenu.y]"
+      location="end"
+    >
+      <v-list density="compact">
+        <v-list-item
+          v-if="activeTab === 'main'"
+          prepend-icon="mdi-archive-arrow-down-outline"
+          @click="moveConversation(contextMenu.convId, 'other')"
+        >
+          <v-list-item-title>Chuyển sang tab Khác</v-list-item-title>
+        </v-list-item>
+        <v-list-item
+          v-else
+          prepend-icon="mdi-archive-arrow-up-outline"
+          @click="moveConversation(contextMenu.convId, 'main')"
+        >
+          <v-list-item-title>Chuyển sang tab Chính</v-list-item-title>
+        </v-list-item>
+      </v-list>
+    </v-menu>
   </div>
 </template>
 
@@ -235,7 +268,20 @@ const emit = defineEmits<{
   'update:search': [value: string];
   'filter-account': [accountId: string | null];
   'update:filters': [params: Record<string, string>];
+  'tab-changed': [tab: string];
+  'conversation-moved': [id: string, tab: string];
 }>();
+
+// ── Tab state ──────────────────────────────────────────────────────────────
+const activeTab = ref('main');
+
+// ── Context menu state ─────────────────────────────────────────────────────
+const contextMenu = reactive({
+  show: false,
+  x: 0,
+  y: 0,
+  convId: '',
+});
 
 // ── Account selector ────────────────────────────────────────────────────────
 const accountOptions = ref<{ text: string; value: string }[]>([]);
@@ -297,13 +343,32 @@ function buildFilterParams(): Record<string, string> {
   if (filters.from) params.from = filters.from;
   if (filters.to) params.to = filters.to;
   if (filters.tags.length > 0) params.tags = filters.tags.join(',');
+  params.tab = activeTab.value;
   return params;
+}
+
+// ── Context menu ───────────────────────────────────────────────────────────
+function openContextMenu(event: MouseEvent, conv: Conversation) {
+  contextMenu.x = event.clientX;
+  contextMenu.y = event.clientY;
+  contextMenu.convId = conv.id;
+  contextMenu.show = true;
+}
+
+async function moveConversation(convId: string, targetTab: string) {
+  contextMenu.show = false;
+  try {
+    await api.patch(`/conversations/${convId}/tab`, { tab: targetTab });
+    emit('conversation-moved', convId, targetTab);
+  } catch (err) {
+    console.error('Failed to move conversation:', err);
+  }
 }
 
 // ── Counts fetch ────────────────────────────────────────────────────────────
 async function fetchCounts() {
   try {
-    const params: Record<string, string> = {};
+    const params: Record<string, string> = { tab: activeTab.value };
     if (selectedAccountId.value) params.accountId = selectedAccountId.value;
     const res = await api.get('/conversations/counts', { params });
     counts.unread = res.data.unread ?? 0;
@@ -336,6 +401,12 @@ watch(
   () => emit('update:filters', buildFilterParams()),
   { deep: true }
 );
+
+watch(activeTab, () => {
+  emit('tab-changed', activeTab.value);
+  emit('update:filters', buildFilterParams());
+  fetchCounts();
+});
 
 watch(selectedAccountId, () => {
   fetchCounts();

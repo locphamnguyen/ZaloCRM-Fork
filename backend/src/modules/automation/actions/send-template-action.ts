@@ -13,7 +13,7 @@ export async function sendTemplateAction(input: {
   threadType: string;
   context: {
     org?: { id: string; name: string | null } | null;
-    contact?: { id: string; fullName: string | null; phone: string | null; status: string | null } | null;
+    contact?: { id: string; fullName: string | null; crmName?: string | null; phone: string | null; status: string | null } | null;
     conversation?: { id: string } | null;
   };
 }) {
