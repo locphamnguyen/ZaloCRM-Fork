@@ -8,6 +8,7 @@ import cors from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
+import fastifyMultipart from '@fastify/multipart';
 import { Server } from 'socket.io';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +47,7 @@ import { automationRoutes } from './modules/automation/automation-routes.js';
 import { templateRoutes } from './modules/automation/template-routes.js';
 import { dripRoutes } from './modules/automation/drip-routes.js';
 import { aiRoutes } from './modules/ai/ai-routes.js';
+import { blockRoutes } from './modules/blocks/block-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,6 +71,9 @@ async function bootstrap() {
     // Skip rate limiting for static assets — only limit API routes
     allowList: (request: { url: string }) => !request.url.startsWith('/api/'),
   });
+
+  // Multipart support for file uploads (blocks module)
+  await app.register(fastifyMultipart, { limits: { fileSize: 25 * 1024 * 1024 } });
 
   // Serve compiled frontend assets in production
   if (config.isProduction) {
@@ -129,6 +134,7 @@ async function bootstrap() {
   await app.register(templateRoutes);
   await app.register(dripRoutes);
   await app.register(aiRoutes);
+  await app.register(blockRoutes);
 
   // Liveness/readiness probe — also checks DB connectivity
   app.get('/health', async () => {
