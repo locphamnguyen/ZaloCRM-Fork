@@ -1,4 +1,4 @@
-# ZaloCRM v2.0 — Quản lý nhiều tài khoản Zalo cá nhân
+# ZaloCRM v2.1 — Quản lý nhiều tài khoản Zalo cá nhân
 
 Hệ thống quản lý tập trung nhiều tài khoản Zalo cá nhân trên 1 giao diện web. Chat real-time, AI assistant, workflow tự động, tích hợp đa nền tảng, analytics nâng cao, PWA mobile.
 
@@ -20,6 +20,17 @@ Hệ thống quản lý tập trung nhiều tài khoản Zalo cá nhân trên 1 
 - **Thông báo** — Tin chưa trả lời >30 phút, lịch hẹn sắp tới, Zalo mất kết nối
 - **Tìm kiếm toàn hệ thống** — Tìm khách hàng, tin nhắn, lịch hẹn
 - **Giao diện** — Theme tối/sáng, thiết kế Liquid Silicon
+
+### Mới trong v2.1
+
+- **📂 Tab "Khác"** — Ẩn hội thoại không quan trọng sang tab riêng, chuột phải để chuyển tab
+- **✏️ Tên KH 2 lớp** — CRM Name (tên thật) + Zalo Name, hiển thị CRM Name ưu tiên, dùng trong template
+- **🔍 Bộ lọc hội thoại** — Lọc theo chưa đọc, chưa trả lời, thời gian, tags
+- **📝 Template nhanh** — Gõ `/` trong ô chat để chèn mẫu tin nhắn với biến động (tên, ngày, trạng thái)
+- **💬 Tin nhắn đặc biệt** — Hiển thị sticker, hình ảnh, video, file, chuyển khoản, cuộc gọi, QR, nhắc hẹn
+- **🔄 Đồng bộ tin nhắn** — Lấy 50 tin cũ khi kết nối Zalo, selfListen dedup, tự tạo contact mới
+- **🐛 Fix: Tên "Unknown"** — Hiển thị đúng tên người gửi từ senderName Zalo
+- **🐛 Fix: PWA setup** — Sửa lỗi vite-plugin-pwa không build được
 
 ### Mới trong v2.0
 
@@ -99,6 +110,15 @@ Header: X-API-Key: your-api-key
 | `zalo.disconnected` | Zalo mất kết nối |
 
 ## Lịch sử phiên bản
+
+### v2.1 (16/04/2026)
+- Tab "Khác": ẩn hội thoại không quan trọng, chuyển tab bằng chuột phải
+- Tên KH 2 lớp: CRM Name + Zalo Name, ưu tiên CRM Name
+- Bộ lọc hội thoại: chưa đọc, chưa trả lời, thời gian, tags
+- Template nhanh: gõ `/` để chèn mẫu tin nhắn với biến động
+- Tin nhắn đặc biệt: hiển thị sticker, ảnh, video, file, chuyển khoản, cuộc gọi
+- Đồng bộ tin nhắn: lấy 50 tin cũ, selfListen dedup, tự tạo contact
+- Fix: tên "Unknown", PWA setup, tin nhắn trùng lặp khi gửi
 
 ### v2.0 (31/03/2026)
 - AI Assistant: gợi ý trả lời, tóm tắt, phân tích cảm xúc

@@ -38,7 +38,7 @@ fi
 # Install frontend dependencies
 if [ ! -d "$REPO_ROOT/frontend/node_modules" ]; then
   echo "Installing frontend dependencies..."
-  (cd "$REPO_ROOT/frontend" && npm install)
+  (cd "$REPO_ROOT/frontend" && npm install --legacy-peer-deps)
 fi
 
 echo "ZaloCRM workspace ready"

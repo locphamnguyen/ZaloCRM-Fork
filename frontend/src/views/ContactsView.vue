@@ -144,7 +144,8 @@ const selectedContact = ref<Contact | null>(null);
 
 const headers = [
   { title: '', key: 'avatarUrl', sortable: false, width: '48px' },
-  { title: 'Tên', key: 'fullName', sortable: true },
+  { title: 'Tên Zalo', key: 'fullName', sortable: true },
+  { title: 'Tên CRM', key: 'crmName', sortable: true },
   { title: 'SĐT', key: 'phone', sortable: false },
   { title: 'Email', key: 'email', sortable: false },
   { title: 'Nguồn', key: 'source', sortable: false },

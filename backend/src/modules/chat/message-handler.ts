@@ -21,6 +21,7 @@ export interface IncomingMessage {
   threadType: 'user' | 'group'; // user or group conversation
   groupName?: string;       // group name if group message
   attachments?: any[];
+  isBackfill?: boolean;     // true for old_messages / sync backfill — skip automations
 }
 
 export interface HandleMessageResult {
@@ -68,20 +69,56 @@ export async function handleIncomingMessage(
     const conversation = await findOrCreateConversation(msg, account.orgId, contactId);
 
     const sentAt = new Date(msg.timestamp);
-    const message = await prisma.message.create({
-      data: {
-        id: randomUUID(),
-        conversationId: conversation.id,
-        zaloMsgId: msg.msgId || null,
-        senderType: msg.isSelf ? 'self' : 'contact',
-        senderUid: msg.senderUid,
-        senderName: msg.senderName || null,
-        content: msg.content || '',
-        contentType: msg.contentType || 'text',
-        attachments: msg.attachments ?? [],
-        sentAt,
-      },
-    });
+
+    // Dedup guard for self messages: if a self message with same content exists
+    // in the last 30 seconds, this is likely a selfListen echo of a CRM-sent message
+    if (msg.isSelf && msg.msgId) {
+      const recentDupe = await prisma.message.findFirst({
+        where: {
+          conversationId: conversation.id,
+          senderType: 'self',
+          content: msg.content || '',
+          sentAt: { gte: new Date(Date.now() - 30_000) },
+        },
+        select: { id: true, zaloMsgId: true },
+      });
+      if (recentDupe) {
+        // If the existing record has no zaloMsgId, backfill it for future dedup
+        if (!recentDupe.zaloMsgId && msg.msgId) {
+          await prisma.message.update({
+            where: { id: recentDupe.id },
+            data: { zaloMsgId: msg.msgId },
+          }).catch(() => {});
+        }
+        logger.debug(`[message-handler] Skipping self echo: content match within 30s`);
+        return null;
+      }
+    }
+
+    let message;
+    try {
+      message = await prisma.message.create({
+        data: {
+          id: randomUUID(),
+          conversationId: conversation.id,
+          zaloMsgId: msg.msgId || null,
+          senderType: msg.isSelf ? 'self' : 'contact',
+          senderUid: msg.senderUid,
+          senderName: msg.senderName || null,
+          content: msg.content || '',
+          contentType: msg.contentType || 'text',
+          attachments: msg.attachments ?? [],
+          sentAt,
+        },
+      });
+    } catch (err: any) {
+      // P2002 = unique constraint violation → duplicate zaloMsgId, skip silently
+      if (err?.code === 'P2002') {
+        logger.debug(`[message-handler] Skipping duplicate zaloMsgId=${msg.msgId}`);
+        return null;
+      }
+      throw err;
+    }
 
     await updateConversationAfterMessage(conversation.id, sentAt, msg.isSelf);
 
@@ -91,6 +128,24 @@ export async function handleIncomingMessage(
         where: { id: contactId, firstContactDate: null },
         data: { firstContactDate: new Date(msg.timestamp) },
       }).catch(() => {});
+    }
+
+    // Drip: stop active enrollments when contact replies (feature-flagged)
+    if (!msg.isSelf && contactId && !msg.isBackfill && process.env.DRIP_ENGINE_ENABLED === 'true') {
+      const { markEnrollmentsOnReply } = await import('../automation/drip/drip-enroller.js');
+      markEnrollmentsOnReply(contactId).catch((err) => {
+        logger.warn('[message-handler] markEnrollmentsOnReply failed', err);
+      });
+    }
+
+    // Skip webhooks and automation for backfilled messages (old_messages / sync)
+    if (msg.isBackfill) {
+      return {
+        message,
+        conversationId: conversation.id,
+        orgId: account.orgId,
+        contactId,
+      };
     }
 
     // Emit webhook for message event (fire-and-forget)
@@ -111,7 +166,7 @@ export async function handleIncomingMessage(
       const contact = contactId
         ? await prisma.contact.findUnique({
             where: { id: contactId },
-            select: { id: true, fullName: true, phone: true, status: true, source: true, assignedUserId: true },
+            select: { id: true, fullName: true, crmName: true, phone: true, status: true, source: true, assignedUserId: true },
           })
         : null;
       const conversationDetails = await prisma.conversation.findUnique({
@@ -181,11 +236,12 @@ async function upsertContact(msg: IncomingMessage, orgId: string): Promise<strin
     return groupContact.id;
   }
 
-  // User messages: self messages don't create a contact
-  if (msg.isSelf) return null;
+  // For self messages on user threads, the contact is the thread recipient (threadId = contact UID)
+  const contactUid = msg.isSelf ? msg.threadId : msg.senderUid;
+  const contactName = msg.isSelf ? '' : msg.senderName; // self msgs don't carry recipient name
 
   let contact = await prisma.contact.findFirst({
-    where: { zaloUid: msg.senderUid, orgId },
+    where: { zaloUid: contactUid, orgId },
     select: { id: true, fullName: true },
   });
 
@@ -194,17 +250,18 @@ async function upsertContact(msg: IncomingMessage, orgId: string): Promise<strin
       data: {
         id: randomUUID(),
         orgId,
-        zaloUid: msg.senderUid,
-        fullName: msg.senderName || 'Unknown',
+        zaloUid: contactUid,
+        fullName: contactName || 'Unknown',
       },
       select: { id: true, fullName: true },
     });
     // Emit webhook for new contact created
     emitWebhook(orgId, 'contact.created', { contactId: contact.id, fullName: contact.fullName });
-  } else if (msg.senderName && contact.fullName !== msg.senderName) {
+  } else if (contactName && contact.fullName !== contactName && contact.fullName === 'Unknown') {
+    // Update name only if currently "Unknown" — don't overwrite user-edited names
     await prisma.contact.update({
       where: { id: contact.id },
-      data: { fullName: msg.senderName },
+      data: { fullName: contactName },
     });
   }
 

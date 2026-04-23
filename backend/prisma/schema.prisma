@@ -13,22 +13,24 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  teams         Team[]
-  users         User[]
-  zaloAccounts  ZaloAccount[]
-  contacts        Contact[]
-  conversations   Conversation[]
-  appointments    Appointment[]
-  activityLogs    ActivityLog[]
-  dailyStats      DailyMessageStat[]
-  settings        AppSetting[]
-  duplicateGroups DuplicateGroup[]
-  savedReports    SavedReport[]
-  integrations    Integration[]
-  automationRules AutomationRule[]
+  teams            Team[]
+  users            User[]
+  zaloAccounts     ZaloAccount[]
+  contacts         Contact[]
+  conversations    Conversation[]
+  appointments     Appointment[]
+  activityLogs     ActivityLog[]
+  dailyStats       DailyMessageStat[]
+  settings         AppSetting[]
+  duplicateGroups  DuplicateGroup[]
+  savedReports     SavedReport[]
+  integrations     Integration[]
+  automationRules  AutomationRule[]
   messageTemplates MessageTemplate[]
-  aiConfig      AiConfig?
-  aiSuggestions AiSuggestion[]
+  aiConfig         AiConfig?
+  aiSuggestions    AiSuggestion[]
+  dripCampaigns    DripCampaign[]
+  automationLogs   AutomationLog[]
 
   @@map("organizations")
 }
@@ -67,6 +69,8 @@ model User {
   appointments     Appointment[]
   repliedMessages  Message[]           @relation("RepliedMessages")
   activityLogs     ActivityLog[]
+  messageTemplates MessageTemplate[]
+  dripCampaigns    DripCampaign[]      @relation("DripCreatedBy")
 
   @@map("users")
 }
@@ -85,11 +89,12 @@ model ZaloAccount {
   lastConnectedAt DateTime? @map("last_connected_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  org           Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  owner         User                @relation(fields: [ownerUserId], references: [id])
-  access        ZaloAccountAccess[]
-  conversations Conversation[]
-  dailyStats    DailyMessageStat[]
+  org             Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner           User                @relation(fields: [ownerUserId], references: [id])
+  access          ZaloAccountAccess[]
+  conversations   Conversation[]
+  dailyStats      DailyMessageStat[]
+  dripEnrollments DripEnrollment[]
 
   @@map("zalo_accounts")
 }
@@ -117,8 +122,9 @@ model Contact {
   phone            String?
   email            String?   @map("email")
   fullName         String?   @map("full_name")
+  crmName          String?   @map("crm_name")
   avatarUrl        String?   @map("avatar_url")
-  source           String?   // FB, TT, GT, CN, etc.
+  source           String? // FB, TT, GT, CN, etc.
   sourceDate       DateTime? @map("source_date")
   firstContactDate DateTime? @map("first_contact_date")
   status           String?   @default("new") // new/contacted/interested/converted/lost
@@ -133,12 +139,13 @@ model Contact {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  assignedUser      User?        @relation("AssignedContacts", fields: [assignedUserId], references: [id])
-  mergedIntoContact Contact?     @relation("ContactMerge", fields: [mergedInto], references: [id])
-  mergedFrom        Contact[]    @relation("ContactMerge")
+  org               Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignedUser      User?            @relation("AssignedContacts", fields: [assignedUserId], references: [id])
+  mergedIntoContact Contact?         @relation("ContactMerge", fields: [mergedInto], references: [id])
+  mergedFrom        Contact[]        @relation("ContactMerge")
   conversations     Conversation[]
   appointments      Appointment[]
+  dripEnrollments   DripEnrollment[]
 
   @@index([orgId, phone])
   @@index([orgId, zaloUid])
@@ -157,15 +164,20 @@ model Conversation {
   lastMessageAt    DateTime? @map("last_message_at")
   unreadCount      Int       @default(0) @map("unread_count")
   isReplied        Boolean   @default(true) @map("is_replied")
+  tab              String    @default("main") @map("tab") // main, other
   createdAt        DateTime  @default(now()) @map("created_at")
 
-  org           Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  zaloAccount   ZaloAccount   @relation(fields: [zaloAccountId], references: [id], onDelete: Cascade)
-  contact       Contact?      @relation(fields: [contactId], references: [id])
-  messages      Message[]
-  aiSuggestions AiSuggestion[]
+  org             Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  zaloAccount     ZaloAccount      @relation(fields: [zaloAccountId], references: [id], onDelete: Cascade)
+  contact         Contact?         @relation(fields: [contactId], references: [id])
+  messages        Message[]
+  aiSuggestions   AiSuggestion[]
+  dripEnrollments DripEnrollment[]
 
   @@unique([zaloAccountId, externalThreadId])
+  @@index([orgId, zaloAccountId, isReplied, lastMessageAt])
+  @@index([orgId, zaloAccountId, lastMessageAt])
+  @@index([orgId, tab, lastMessageAt])
   @@map("conversations")
 }
 
@@ -186,9 +198,11 @@ model Message {
   repliedByUserId String?   @map("replied_by_user_id")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  repliedBy    User?        @relation("RepliedMessages", fields: [repliedByUserId], references: [id])
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  repliedBy      User?           @relation("RepliedMessages", fields: [repliedByUserId], references: [id])
+  automationLogs AutomationLog[]
 
+  @@unique([conversationId, zaloMsgId])
   @@map("messages")
 }
 
@@ -254,7 +268,7 @@ model DailyMessageStat {
 model Integration {
   id         String    @id @default(uuid())
   orgId      String    @map("org_id")
-  type       String    // google_sheets | telegram | facebook | zapier
+  type       String // google_sheets | telegram | facebook | zapier
   name       String    @default("")
   config     Json      @default("{}") // credentials + settings
   enabled    Boolean   @default(true)
@@ -272,9 +286,9 @@ model Integration {
 model SyncLog {
   id            String   @id @default(uuid())
   integrationId String   @map("integration_id")
-  direction     String   // import | export
+  direction     String // import | export
   recordCount   Int      @default(0) @map("record_count")
-  status        String   // success | partial | failed
+  status        String // success | partial | failed
   errorMessage  String?  @map("error_message")
   createdAt     DateTime @default(now()) @map("created_at")
 
@@ -320,7 +334,7 @@ model SavedReport {
   id        String   @id @default(uuid())
   orgId     String   @map("org_id")
   name      String
-  type      String   // conversion_funnel, team_performance, response_time, custom
+  type      String // conversion_funnel, team_performance, response_time, custom
   config    Json     @default("{}")
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -331,19 +345,19 @@ model SavedReport {
 }
 
 model AutomationRule {
-  id          String   @id @default(uuid())
-  orgId       String   @map("org_id")
+  id          String    @id @default(uuid())
+  orgId       String    @map("org_id")
   name        String
   description String?
   trigger     String
-  conditions  Json     @default("[]")
-  actions     Json     @default("[]")
-  enabled     Boolean  @default(true)
-  priority    Int      @default(0)
-  runCount    Int      @default(0) @map("run_count")
+  conditions  Json      @default("[]")
+  actions     Json      @default("[]")
+  enabled     Boolean   @default(true)
+  priority    Int       @default(0)
+  runCount    Int       @default(0) @map("run_count")
   lastRunAt   DateTime? @map("last_run_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -352,16 +366,20 @@ model AutomationRule {
 }
 
 model MessageTemplate {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
-  name      String
-  content   String
-  category  String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  ownerUserId String?  @map("owner_user_id")
+  name        String
+  content     String
+  category    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner     User?        @relation(fields: [ownerUserId], references: [id])
+  dripSteps DripStep[]
 
+  @@index([orgId, ownerUserId])
   @@index([orgId, category])
   @@map("message_templates")
 }
@@ -382,15 +400,15 @@ model AiConfig {
 }
 
 model AiSuggestion {
-  id             String    @id @default(uuid())
-  orgId          String    @map("org_id")
-  conversationId String    @map("conversation_id")
-  messageId      String?   @map("message_id")
+  id             String   @id @default(uuid())
+  orgId          String   @map("org_id")
+  conversationId String   @map("conversation_id")
+  messageId      String?  @map("message_id")
   type           String
   content        String
   confidence     Float
-  accepted       Boolean   @default(false)
-  createdAt      DateTime  @default(now()) @map("created_at")
+  accepted       Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
 
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -399,4 +417,97 @@ model AiSuggestion {
   @@index([conversationId, createdAt])
   @@index([orgId, type, createdAt])
   @@map("ai_suggestions")
+}
+
+// Drip campaign: multi-step automated message sequence
+model DripCampaign {
+  id                 String   @id @default(uuid())
+  orgId              String   @map("org_id")
+  name               String
+  description        String?
+  enabled            Boolean  @default(true)
+  windowStart        Int      @default(8) @map("window_start") // hour 0-23
+  windowEnd          Int      @default(11) @map("window_end")
+  timezone           String   @default("Asia/Ho_Chi_Minh")
+  startTrigger       String   @default("manual") @map("start_trigger") // manual | webhook | tag
+  startTag           String?  @map("start_tag")
+  stopOnReply        Boolean  @default(true) @map("stop_on_reply")
+  stopOnTag          String?  @map("stop_on_tag")
+  stopOnInactiveDays Int?     @map("stop_on_inactive_days")
+  createdBy          String   @map("created_by")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator     User             @relation("DripCreatedBy", fields: [createdBy], references: [id])
+  steps       DripStep[]
+  enrollments DripEnrollment[]
+
+  @@index([orgId, enabled])
+  @@map("drip_campaigns")
+}
+
+// Ordered step within a drip campaign
+model DripStep {
+  id         String   @id @default(uuid())
+  campaignId String   @map("campaign_id")
+  stepIndex  Int      @map("step_index") // 0-based
+  templateId String?  @map("template_id")
+  content    String? // inline fallback
+  dayOffset  Int      @map("day_offset") // default = step_index
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  campaign DripCampaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  template MessageTemplate? @relation(fields: [templateId], references: [id])
+
+  @@unique([campaignId, stepIndex])
+  @@map("drip_steps")
+}
+
+// Enrollment: a contact currently progressing through a drip campaign
+model DripEnrollment {
+  id             String    @id @default(uuid())
+  campaignId     String    @map("campaign_id")
+  contactId      String    @map("contact_id")
+  conversationId String    @map("conversation_id")
+  zaloAccountId  String    @map("zalo_account_id")
+  currentStep    Int       @default(0) @map("current_step")
+  status         String    @default("active") // active | paused | completed | cancelled | failed
+  scheduledAt    DateTime? @map("scheduled_at")
+  lastSentAt     DateTime? @map("last_sent_at")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  failReason     String?   @map("fail_reason")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  campaign     DripCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact      Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  conversation Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  zaloAccount  ZaloAccount     @relation(fields: [zaloAccountId], references: [id])
+  logs         AutomationLog[]
+
+  @@index([status, scheduledAt])
+  @@index([contactId, campaignId, status])
+  @@map("drip_enrollments")
+}
+
+// Audit log of drip send attempts
+model AutomationLog {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  enrollmentId String   @map("enrollment_id")
+  stepIndex    Int      @map("step_index")
+  messageId    String?  @map("message_id")
+  status       String // sent | failed | rate_limited | skipped
+  error        String?
+  sentAt       DateTime @default(now()) @map("sent_at")
+
+  org        Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  enrollment DripEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  message    Message?       @relation(fields: [messageId], references: [id])
+
+  @@index([enrollmentId, sentAt])
+  @@index([orgId, sentAt])
+  @@map("automation_logs")
 }

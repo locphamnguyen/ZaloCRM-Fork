@@ -13,7 +13,7 @@ export async function sendTemplateAction(input: {
   threadType: string;
   context: {
     org?: { id: string; name: string | null } | null;
-    contact?: { id: string; fullName: string | null; phone: string | null; status: string | null } | null;
+    contact?: { id: string; fullName: string | null; crmName?: string | null; phone: string | null; status: string | null } | null;
     conversation?: { id: string } | null;
   };
 }) {
@@ -36,12 +36,14 @@ export async function sendTemplateAction(input: {
 
   zaloRateLimiter.recordSend(input.zaloAccountId);
   const threadType = input.threadType === 'group' ? 1 : 0;
-  await instance.api.sendMessage({ msg: content }, input.threadId, threadType);
+  const sendResult = await instance.api.sendMessage({ msg: content }, input.threadId, threadType);
+  const zaloMsgId = String(sendResult?.msgId || sendResult?.data?.msgId || '');
 
   return prisma.message.create({
     data: {
       id: randomUUID(),
       conversationId: input.conversationId,
+      zaloMsgId: zaloMsgId || null,
       senderType: 'self',
       senderUid: null,
       senderName: 'Automation',

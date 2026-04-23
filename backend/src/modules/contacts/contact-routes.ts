@@ -36,6 +36,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
       if (search) {
         where.OR = [
           { fullName: { contains: search, mode: 'insensitive' } },
+          { crmName: { contains: search, mode: 'insensitive' } },
           { phone: { contains: search } },
           { email: { contains: search, mode: 'insensitive' } },
         ];
@@ -149,6 +150,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
         data: {
           orgId: user.orgId,
           fullName: body.fullName,
+          crmName: body.crmName,
           phone: body.phone,
           email: body.email,
           zaloUid: body.zaloUid,
@@ -204,6 +206,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
 
       const updateData: any = {
         fullName: body.fullName,
+        crmName: body.crmName,
         phone: body.phone,
         email: body.email,
         avatarUrl: body.avatarUrl,

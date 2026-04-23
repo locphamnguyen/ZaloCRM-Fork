@@ -94,10 +94,17 @@ export function attachZaloListener(ctx: ListenerContext): void {
 
       // Resolve display name — prefer zaloName from API over dName
       let senderName: string = message.data?.dName || '';
-      if (!message.isSelf && senderUid && api.getUserInfo) {
-        const userInfo = await resolveZaloName(api, senderUid, userInfoCache);
-        if (userInfo.zaloName) senderName = userInfo.zaloName;
-        if (userInfo.avatar) updateContactAvatar(senderUid, userInfo.avatar);
+      if (senderUid && api.getUserInfo) {
+        // For self messages, resolve recipient name using threadId
+        // For contact messages, resolve sender name using senderUid
+        const resolveUid = message.isSelf ? (message.threadId || '') : senderUid;
+        if (resolveUid) {
+          const userInfo = await resolveZaloName(api, resolveUid, userInfoCache);
+          if (!message.isSelf) {
+            if (userInfo.zaloName) senderName = userInfo.zaloName;
+            if (userInfo.avatar) updateContactAvatar(senderUid, userInfo.avatar);
+          }
+        }
       }
 
       // Resolve group name for group threads
@@ -144,6 +151,80 @@ export function attachZaloListener(ctx: ListenerContext): void {
       await handleMessageUndo(accountId, String(msgId));
       io?.emit('chat:deleted', { accountId, msgId: String(msgId) });
     }
+  });
+
+  // Backfill messages delivered on reconnect (missed while disconnected)
+  listener.on('old_messages', async (messages: any[], type: number) => {
+    const threadType = type === 1 ? 'group' : 'user';
+    logger.info(`[zalo:${accountId}] Received ${messages.length} old ${threadType} messages`);
+
+    for (const message of messages) {
+      try {
+        const senderUid = String(message.data?.uidFrom || '');
+        let senderName = message.data?.dName || '';
+
+        // Resolve display name for non-self messages
+        if (!message.isSelf && senderUid && api.getUserInfo) {
+          const userInfo = await resolveZaloName(api, senderUid, userInfoCache);
+          if (userInfo.zaloName) senderName = userInfo.zaloName;
+        }
+
+        let groupName: string | undefined;
+        if (threadType === 'group' && message.threadId) {
+          groupName = await resolveGroupName(api, message.threadId);
+        }
+
+        const rawContent = message.data?.content;
+        const content =
+          typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
+        const contentType = detectContentType(message.data?.msgType, rawContent);
+
+        const result = await handleIncomingMessage({
+          accountId,
+          senderUid,
+          senderName,
+          content,
+          contentType,
+          msgId: String(message.data?.msgId || ''),
+          timestamp: parseInt(message.data?.ts || String(Date.now())),
+          isSelf: message.isSelf || false,
+          threadId: message.threadId || '',
+          threadType,
+          groupName,
+          attachments: [],
+          isBackfill: true,
+        });
+
+        if (result) {
+          io?.emit('chat:message', {
+            accountId,
+            message: result.message,
+            conversationId: result.conversationId,
+          });
+        }
+      } catch (err) {
+        logger.warn(`[zalo:${accountId}] old_messages processing error:`, err);
+      }
+    }
+  });
+
+  // Group system events: member join/leave/kick, name change, etc.
+  listener.on('group_event', (event: any) => {
+    logger.info(`[zalo:${accountId}] Group event: type=${event?.type ?? 'unknown'}`, {
+      groupId: event?.groupId,
+      actorId: event?.actorId,
+      members: event?.members,
+    });
+    // Future: store as system message in the group conversation
+  });
+
+  // Friend lifecycle events: request sent/accepted/blocked
+  listener.on('friend_event', (event: any) => {
+    logger.info(`[zalo:${accountId}] Friend event: type=${event?.type ?? 'unknown'}`, {
+      fromId: event?.fromId,
+      toId: event?.toId,
+    });
+    // Future: update contact status based on friend_event type
   });
 
   listener.on('closed', (code: number, reason: string) => {

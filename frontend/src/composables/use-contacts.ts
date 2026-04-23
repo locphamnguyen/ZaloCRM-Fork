@@ -10,6 +10,7 @@ import { api } from '@/api/index';
 export interface Contact {
   id: string;
   fullName: string | null;
+  crmName?: string | null;
   phone: string | null;
   email?: string | null;
   avatarUrl?: string | null;

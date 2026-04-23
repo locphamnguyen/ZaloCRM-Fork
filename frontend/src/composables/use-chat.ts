@@ -84,11 +84,18 @@ export function useChat() {
     aiSentiment.value = null;
   }
 
+  const extraFilters = ref<Record<string, string>>({});
+
   async function fetchConversations() {
     loadingConvs.value = true;
     try {
       const res = await api.get('/conversations', {
-        params: { limit: 100, search: searchQuery.value, accountId: accountFilter.value || undefined },
+        params: {
+          limit: 100,
+          search: searchQuery.value,
+          accountId: accountFilter.value || undefined,
+          ...extraFilters.value,
+        },
       });
       conversations.value = res.data.conversations;
     } catch (err) {
@@ -271,6 +278,7 @@ export function useChat() {
     sendingMsg,
     searchQuery,
     accountFilter,
+    extraFilters,
     aiSuggestion,
     aiSuggestionLoading,
     aiSuggestionError,

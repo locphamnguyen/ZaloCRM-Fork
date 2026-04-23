@@ -38,11 +38,13 @@ import { startZaloHealthCheck } from './modules/zalo/zalo-health-check.js';
 import { publicApiRoutes } from './modules/api/public-api-routes.js';
 import { webhookSettingsRoutes } from './modules/api/webhook-settings-routes.js';
 import { startContactIntelligence } from './modules/contacts/contact-intelligence.js';
+import { startDripScheduler } from './modules/automation/drip/drip-scheduler.js';
 import { analyticsRoutes } from './modules/analytics/analytics-routes.js';
 import { savedReportRoutes } from './modules/analytics/saved-report-routes.js';
 import { integrationRoutes } from './modules/integrations/integration-routes.js';
 import { automationRoutes } from './modules/automation/automation-routes.js';
 import { templateRoutes } from './modules/automation/template-routes.js';
+import { dripRoutes } from './modules/automation/drip-routes.js';
 import { aiRoutes } from './modules/ai/ai-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -125,6 +127,7 @@ async function bootstrap() {
   await app.register(integrationRoutes);
   await app.register(automationRoutes);
   await app.register(templateRoutes);
+  await app.register(dripRoutes);
   await app.register(aiRoutes);
 
   // Liveness/readiness probe — also checks DB connectivity
@@ -170,6 +173,7 @@ async function bootstrap() {
     startAppointmentReminder(io);
     startZaloHealthCheck();
     startContactIntelligence();
+    startDripScheduler();
   } catch (err) {
     logger.error('Failed to start server:', err);
     process.exit(1);

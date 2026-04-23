@@ -12,11 +12,12 @@ import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 import { attachZaloListener, type UserInfoCacheEntry } from './zalo-listener-factory.js';
 import { emitWebhook } from '../api/webhook-service.js';
+import { startMessageSync, stopMessageSync } from './zalo-message-sync.js';
 
 // zca-js has no reliable ESM type exports — load via CJS interop
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { Zalo } = require('zca-js') as { Zalo: new (opts: { logging: boolean }) => any };
+const { Zalo } = require('zca-js') as { Zalo: new (opts: { logging: boolean; selfListen?: boolean }) => any };
 
 interface ZaloCredentials {
   cookie: any;
@@ -47,7 +48,7 @@ class ZaloAccountPool {
 
   // Initiate QR-based login; emits QR events to frontend via Socket.IO
   async loginQR(accountId: string): Promise<void> {
-    const zalo = new Zalo({ logging: false });
+    const zalo = new Zalo({ logging: false, selfListen: true });
     this.instances.set(accountId, { zalo, api: null, status: 'qr_pending', lastActivity: new Date() });
 
     try {
@@ -105,6 +106,11 @@ class ZaloAccountPool {
       prisma.zaloAccount.findUnique({ where: { id: accountId }, select: { orgId: true } })
         .then((rec) => rec && emitWebhook(rec.orgId, 'zalo.connected', { accountId }))
         .catch(() => {});
+
+      // Fire-and-forget: link orphaned conversations on login
+      this.backfillOrphanedConversations(accountId, api).catch((err) => {
+        logger.warn(`[zalo:${accountId}] Backfill orphaned conversations failed:`, err);
+      });
     } catch (err) {
       const instance = this.instances.get(accountId);
       if (instance) instance.status = 'disconnected';
@@ -115,7 +121,7 @@ class ZaloAccountPool {
 
   // Reconnect using previously saved session credentials
   async reconnect(accountId: string, credentials: ZaloCredentials): Promise<void> {
-    const zalo = new Zalo({ logging: false });
+    const zalo = new Zalo({ logging: false, selfListen: true });
     this.instances.set(accountId, { zalo, api: null, status: 'connecting', lastActivity: new Date() });
 
     try {
@@ -152,6 +158,11 @@ class ZaloAccountPool {
       prisma.zaloAccount.findUnique({ where: { id: accountId }, select: { orgId: true } })
         .then((rec) => rec && emitWebhook(rec.orgId, 'zalo.connected', { accountId }))
         .catch(() => {});
+
+      // Fire-and-forget: link orphaned conversations on reconnect
+      this.backfillOrphanedConversations(accountId, api).catch((err) => {
+        logger.warn(`[zalo:${accountId}] Backfill orphaned conversations failed:`, err);
+      });
     } catch (err) {
       const instance = this.instances.get(accountId);
       if (instance) instance.status = 'disconnected';
@@ -171,6 +182,7 @@ class ZaloAccountPool {
         const inst = this.instances.get(id);
         if (inst) inst.status = 'disconnected';
         this.updateAccountDB(id, 'disconnected', null);
+        stopMessageSync(id);
         // Emit webhook for disconnect (fire-and-forget)
         prisma.zaloAccount.findUnique({ where: { id }, select: { orgId: true } })
           .then((rec) => rec && emitWebhook(rec.orgId, 'zalo.disconnected', { accountId: id }))
@@ -196,6 +208,9 @@ class ZaloAccountPool {
         setTimeout(() => this.autoReconnect(id), 30_000);
       },
     });
+
+    // Start periodic group message sync backup
+    startMessageSync(api, accountId);
   }
 
   // Persist session credentials to DB
@@ -255,6 +270,7 @@ class ZaloAccountPool {
         logger.warn(`[zalo:${accountId}] Error stopping listener:`, err);
       }
     }
+    stopMessageSync(accountId);
     this.instances.delete(accountId);
   }
 
@@ -276,6 +292,71 @@ class ZaloAccountPool {
 
   getInstance(accountId: string): ZaloInstance | undefined {
     return this.instances.get(accountId);
+  }
+
+  // Link orphaned conversations (contactId is null) to contacts via Zalo API
+  private async backfillOrphanedConversations(accountId: string, api: any): Promise<void> {
+    const account = await prisma.zaloAccount.findUnique({
+      where: { id: accountId },
+      select: { orgId: true },
+    });
+    if (!account) return;
+
+    const orphaned = await prisma.conversation.findMany({
+      where: { zaloAccountId: accountId, contactId: null, threadType: 'user' },
+      select: { id: true, externalThreadId: true },
+    });
+
+    if (orphaned.length === 0) return;
+    logger.info(`[zalo:${accountId}] Backfilling ${orphaned.length} orphaned conversation(s)`);
+
+    for (const conv of orphaned) {
+      const uid = conv.externalThreadId;
+      if (!uid) continue;
+
+      let contact = await prisma.contact.findFirst({
+        where: { zaloUid: uid, orgId: account.orgId },
+        select: { id: true },
+      });
+
+      if (!contact) {
+        let zaloName = '';
+        let avatar = '';
+        let phone = '';
+        try {
+          const result = await api.getUserInfo(uid);
+          const profiles = result?.changed_profiles || {};
+          const profile = profiles[uid] || profiles[`${uid}_0`];
+          if (profile) {
+            zaloName = profile.zaloName || profile.zalo_name || profile.displayName || profile.display_name || '';
+            avatar = profile.avatar || '';
+            phone = profile.phoneNumber || '';
+          }
+        } catch (err) {
+          logger.warn(`[zalo:${accountId}] getUserInfo failed for ${uid}:`, err);
+        }
+
+        const { randomUUID } = await import('node:crypto');
+        contact = await prisma.contact.create({
+          data: {
+            id: randomUUID(),
+            orgId: account.orgId,
+            zaloUid: uid,
+            fullName: zaloName || 'Unknown',
+            avatarUrl: avatar || null,
+            phone: phone || null,
+          },
+          select: { id: true },
+        });
+      }
+
+      await prisma.conversation.update({
+        where: { id: conv.id },
+        data: { contactId: contact.id },
+      });
+    }
+
+    logger.info(`[zalo:${accountId}] Backfill complete: ${orphaned.length} conversation(s) linked`);
   }
 }
 
