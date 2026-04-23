@@ -4,6 +4,7 @@
  */
 import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
+import { normalizePhone } from '../../shared/utils/phone.js';
 
 function levenshteinRatio(a: string, b: string): number {
   const la = a.length;
@@ -22,10 +23,6 @@ function levenshteinRatio(a: string, b: string): number {
     }
   }
   return 1 - dp[la][lb] / Math.max(la, lb);
-}
-
-function normPhone(phone: string): string {
-  return phone.replace(/[\s\-\.]/g, '').toLowerCase();
 }
 
 function normName(name: string): string {
@@ -62,7 +59,9 @@ export async function detectDuplicates(): Promise<void> {
     const byPhone = new Map<string, string[]>();
     for (const c of contacts) {
       if (!c.phone) continue;
-      const key = normPhone(c.phone);
+      // normalizePhone returns null for invalid — skip those contacts
+      const key = normalizePhone(c.phone);
+      if (!key) continue;
       if (!byPhone.has(key)) byPhone.set(key, []);
       byPhone.get(key)!.push(c.id);
     }

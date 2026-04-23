@@ -11,6 +11,7 @@ import { mergeContacts } from './merge-service.js';
 import { runContactIntelligence } from './contact-intelligence.js';
 import { runAutomationRules } from '../automation/automation-service.js';
 import { validateCustomAttrs } from './custom-attrs/attr-validator.js';
+import { findPeers } from './duplicate-alert-service.js';
 
 type QueryParams = Record<string, string>;
 
@@ -398,6 +399,22 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       logger.error('[contacts] Recompute trigger error:', err);
       return reply.status(500).send({ error: 'Failed to start recompute' });
+    }
+  });
+
+  // ── GET /api/v1/contacts/:id/duplicate-peers — on-demand duplicate alert ─
+  app.get('/api/v1/contacts/:id/duplicate-peers', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.user!;
+      const { id } = request.params as { id: string };
+      const peers = await findPeers(id, user);
+      return { peers };
+    } catch (err: any) {
+      if (err?.statusCode === 404) {
+        return reply.status(404).send({ error: 'Contact not found' });
+      }
+      logger.error('[contacts] Duplicate peers error:', err);
+      return reply.status(500).send({ error: 'Failed to fetch duplicate peers' });
     }
   });
 }
