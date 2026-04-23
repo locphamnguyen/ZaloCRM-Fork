@@ -130,6 +130,14 @@ export async function handleIncomingMessage(
       }).catch(() => {});
     }
 
+    // Drip: stop active enrollments when contact replies (feature-flagged)
+    if (!msg.isSelf && contactId && !msg.isBackfill && process.env.DRIP_ENGINE_ENABLED === 'true') {
+      const { markEnrollmentsOnReply } = await import('../automation/drip/drip-enroller.js');
+      markEnrollmentsOnReply(contactId).catch((err) => {
+        logger.warn('[message-handler] markEnrollmentsOnReply failed', err);
+      });
+    }
+
     // Skip webhooks and automation for backfilled messages (old_messages / sync)
     if (msg.isBackfill) {
       return {
