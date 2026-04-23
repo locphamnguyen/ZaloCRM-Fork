@@ -64,6 +64,36 @@ export function detectContentType(msgType: string | undefined, content: any): st
   return 'text';
 }
 
+export interface AlbumInfo {
+  albumKey: string | null;
+  albumIndex: number | null;
+  albumTotal: number | null;
+}
+
+/**
+ * Extract multi-image album metadata from Zalo content payload.
+ * Zalo tags each photo in an album with a shared group_layout_id and position.
+ */
+export function extractAlbumInfo(contentType: string, rawContent: unknown): AlbumInfo {
+  const empty: AlbumInfo = { albumKey: null, albumIndex: null, albumTotal: null };
+  if (contentType !== 'image' || typeof rawContent !== 'object' || rawContent === null) return empty;
+  const paramsRaw = (rawContent as Record<string, unknown>).params;
+  let params: Record<string, unknown> | null = null;
+  try {
+    params = typeof paramsRaw === 'string' ? JSON.parse(paramsRaw) : (paramsRaw as Record<string, unknown> | null);
+  } catch {
+    return empty;
+  }
+  if (!params || !params.is_group_layout || !params.group_layout_id) return empty;
+  const idx = Number(params.id_in_group);
+  const total = Number(params.total_item_in_group);
+  return {
+    albumKey: String(params.group_layout_id),
+    albumIndex: Number.isFinite(idx) ? idx : null,
+    albumTotal: Number.isFinite(total) ? total : null,
+  };
+}
+
 /**
  * Fire-and-forget: fill in a missing avatarUrl on a Contact row.
  * Only updates rows where avatarUrl is currently null.

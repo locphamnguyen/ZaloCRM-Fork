@@ -6,7 +6,7 @@
 import type { Server } from 'socket.io';
 import { logger } from '../../shared/utils/logger.js';
 import { handleIncomingMessage, handleMessageUndo } from '../chat/message-handler.js';
-import { detectContentType, updateContactAvatar } from './zalo-message-helpers.js';
+import { detectContentType, extractAlbumInfo, updateContactAvatar } from './zalo-message-helpers.js';
 
 // Cached user info entry with 5-minute TTL
 export interface UserInfoCacheEntry {
@@ -117,6 +117,7 @@ export function attachZaloListener(ctx: ListenerContext): void {
       const content =
         typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
       const contentType = detectContentType(message.data?.msgType, rawContent);
+      const album = extractAlbumInfo(contentType, rawContent);
 
       const result = await handleIncomingMessage({
         accountId,
@@ -132,6 +133,9 @@ export function attachZaloListener(ctx: ListenerContext): void {
         groupName,
         attachments: [],
         quote: message.data?.quote,
+        albumKey: album.albumKey,
+        albumIndex: album.albumIndex,
+        albumTotal: album.albumTotal,
       });
 
       if (result) {
@@ -179,6 +183,7 @@ export function attachZaloListener(ctx: ListenerContext): void {
         const content =
           typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
         const contentType = detectContentType(message.data?.msgType, rawContent);
+        const album = extractAlbumInfo(contentType, rawContent);
 
         const result = await handleIncomingMessage({
           accountId,
@@ -193,6 +198,10 @@ export function attachZaloListener(ctx: ListenerContext): void {
           threadType,
           groupName,
           attachments: [],
+          quote: message.data?.quote,
+          albumKey: album.albumKey,
+          albumIndex: album.albumIndex,
+          albumTotal: album.albumTotal,
           isBackfill: true,
         });
 

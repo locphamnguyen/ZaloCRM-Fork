@@ -305,7 +305,7 @@ export async function chatRoutes(app: FastifyInstance) {
           senderName: 'Staff',
           content,
           contentType: 'text',
-          quote: quote ?? null,
+          quote: quote ?? undefined,
           sentAt: new Date(),
           repliedByUserId: user.id,
         },

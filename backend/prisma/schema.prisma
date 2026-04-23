@@ -190,6 +190,9 @@ model Message {
   contentType     String    @default("text") @map("content_type") // text, image, file, sticker, voice, video, link
   attachments     Json      @default("[]")
   quote           Json?     @map("quote")
+  albumKey        String?   @map("album_key")   // Zalo group_layout_id — identifies multi-image albums
+  albumIndex      Int?      @map("album_index") // 0-based position within album
+  albumTotal      Int?      @map("album_total") // total items in album
   isDeleted       Boolean   @default(false) @map("is_deleted")
   deletedAt       DateTime? @map("deleted_at")
   sentAt          DateTime  @map("sent_at")
@@ -201,6 +204,7 @@ model Message {
   reactions    MessageReaction[]
 
   @@unique([conversationId, zaloMsgId])
+  @@index([conversationId, albumKey])
   @@map("messages")
 }
 

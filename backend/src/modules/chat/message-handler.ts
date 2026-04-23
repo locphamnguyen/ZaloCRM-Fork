@@ -22,6 +22,9 @@ export interface IncomingMessage {
   groupName?: string;       // group name if group message
   attachments?: any[];
   quote?: unknown;
+  albumKey?: string | null;
+  albumIndex?: number | null;
+  albumTotal?: number | null;
   isBackfill?: boolean;     // true for old_messages / sync backfill — skip automations
 }
 
@@ -36,6 +39,9 @@ export interface HandleMessageResult {
     content: string | null;
     contentType: string;
     attachments: any;
+    albumKey: string | null;
+    albumIndex: number | null;
+    albumTotal: number | null;
     isDeleted: boolean;
     deletedAt: Date | null;
     sentAt: Date;
@@ -109,7 +115,10 @@ export async function handleIncomingMessage(
           content: msg.content || '',
           contentType: msg.contentType || 'text',
           attachments: msg.attachments ?? [],
-          quote: msg.quote ?? null,
+          quote: msg.quote ?? undefined,
+          albumKey: msg.albumKey ?? null,
+          albumIndex: msg.albumIndex ?? null,
+          albumTotal: msg.albumTotal ?? null,
           sentAt,
         },
       });

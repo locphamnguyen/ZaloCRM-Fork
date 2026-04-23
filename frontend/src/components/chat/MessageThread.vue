@@ -37,18 +37,46 @@
       <!-- Messages -->
       <div ref="messagesContainer" class="flex-grow-1 overflow-y-auto pa-3 chat-messages-area">
         <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-2" />
-        <MessageBubble
-          v-for="msg in messages"
-          :key="msg.id"
-          :message="msg"
-          :reply="msg.reply || null"
-          :reactions="msg.reactions || []"
-          :is-self="msg.senderType === 'self'"
-          :is-group="conversation.threadType === 'group'"
-          @contextmenu="onContextMenu($event, msg)"
-          @preview-image="previewImageUrl = $event"
-          @toggle-reaction="onToggleReaction(msg, $event)"
-        />
+        <template v-for="item in displayItems" :key="item.key">
+          <!-- Album: multiple images sharing the same Zalo albumKey -->
+          <div v-if="item.kind === 'album'" class="mb-2 d-flex" :class="item.senderType === 'self' ? 'justify-end' : 'justify-start'">
+            <div style="max-width: 70%;">
+              <div v-if="conversation.threadType === 'group' && item.senderType !== 'self'" class="text-caption mb-1" style="color: #00F2FF; font-weight: 500;">
+                {{ item.senderName || 'Unknown' }}
+              </div>
+              <div class="message-bubble pa-1 rounded-lg" :class="item.senderType === 'self' ? 'bg-primary' : 'bg-white'">
+                <div class="album-grid" :class="albumGridClass(item.messages.length)">
+                  <img
+                    v-for="m in item.messages"
+                    :key="m.id"
+                    :src="getImageUrl(m)!"
+                    alt="Hình ảnh"
+                    class="album-tile"
+                    @click="previewImageUrl = getImageUrl(m)!"
+                  />
+                </div>
+                <div v-if="item.totalExpected && item.totalExpected > item.messages.length" class="text-caption px-2 py-1" style="opacity: 0.7;">
+                  {{ item.messages.length }}/{{ item.totalExpected }} ảnh đã nhận
+                </div>
+                <div class="text-caption px-2 pb-1 msg-time" :class="item.senderType === 'self' ? 'msg-time-self' : 'msg-time-contact'" style="font-size: 0.7rem;">
+                  {{ formatMessageTime(item.sentAt) }} · 🖼️ {{ item.messages.length }} ảnh
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Single message — rendered via MessageBubble -->
+          <MessageBubble
+            v-else
+            :message="item.msg"
+            :reply="item.msg.reply || null"
+            :reactions="item.msg.reactions || []"
+            :is-self="item.msg.senderType === 'self'"
+            :is-group="conversation.threadType === 'group'"
+            @contextmenu="onContextMenu($event, item.msg)"
+            @preview-image="previewImageUrl = $event"
+            @toggle-reaction="onToggleReaction(item.msg, $event)"
+          />
+        </template>
         <div v-if="!loading && messages.length === 0" class="text-center pa-8 text-grey">Chưa có tin nhắn</div>
       </div>
 
@@ -193,6 +221,56 @@ const editorRef = ref<InstanceType<typeof RichTextEditor> | null>(null);
 // Typing indicator — computed from prop
 const currentTypers = computed(() => props.typingUsers || []);
 
+// ── Display item types ──────────────────────────────────────────────────────
+
+type DisplayItem =
+  | { kind: 'single'; key: string; msg: Message }
+  | { kind: 'album'; key: string; senderType: string; senderName: string | null; sentAt: string; totalExpected: number | null; messages: Message[] };
+
+/** Group consecutive image messages sharing the same Zalo albumKey into an album item. */
+const displayItems = computed<DisplayItem[]>(() => {
+  const out: DisplayItem[] = [];
+  let cur: Extract<DisplayItem, { kind: 'album' }> | null = null;
+  for (const msg of props.messages) {
+    const canGroup = msg.contentType === 'image' && msg.albumKey && !msg.isDeleted && !!getImageUrl(msg);
+    if (canGroup && cur && cur.key === `album:${msg.albumKey}:${msg.senderType}`) {
+      cur.messages.push(msg);
+      continue;
+    }
+    cur = null;
+    if (canGroup) {
+      cur = {
+        kind: 'album',
+        key: `album:${msg.albumKey}:${msg.senderType}`,
+        senderType: msg.senderType,
+        senderName: msg.senderName,
+        sentAt: msg.sentAt,
+        totalExpected: msg.albumTotal ?? null,
+        messages: [msg],
+      };
+      out.push(cur);
+    } else {
+      out.push({ kind: 'single', key: msg.id, msg });
+    }
+  }
+  // Sort images within each album by albumIndex for stable order
+  for (const item of out) {
+    if (item.kind === 'album') {
+      item.messages.sort((a, b) => (a.albumIndex ?? 0) - (b.albumIndex ?? 0));
+    }
+  }
+  return out;
+});
+
+function albumGridClass(count: number): string {
+  if (count <= 1) return 'album-grid-1';
+  if (count === 2) return 'album-grid-2';
+  if (count <= 4) return 'album-grid-2';
+  return 'album-grid-3';
+}
+
+// ── Context menu / actions ──────────────────────────────────────────────────
+
 function onContextMenu(event: MouseEvent, msg: Message) {
   contextMsg.value = msg;
   contextPos.value = { x: event.clientX, y: event.clientY };
@@ -247,7 +325,8 @@ function onCancelReplyEdit() {
   if (props.editingMessage) inputText.value = '';
 }
 
-// --- Template quick-insert ---
+// ── Template quick-insert ───────────────────────────────────────────────────
+
 const showTemplatePopup = ref(false);
 const templateQuery = ref('');
 const templates = ref<TemplateItem[]>([]);
@@ -263,7 +342,6 @@ onMounted(() => { loadTemplates(); });
 
 function onTypingEvent() {
   emit('typing');
-  // Template popup trigger: check if last char is /
   const value = inputText.value;
   if (value === '/' || /\s\/$/.test(value)) {
     showTemplatePopup.value = true;
@@ -281,6 +359,8 @@ function onTemplateSelect(rendered: string) {
   templateQuery.value = '';
 }
 
+// ── Send ────────────────────────────────────────────────────────────────────
+
 function handleSend() {
   if (showTemplatePopup.value) { showTemplatePopup.value = false; return; }
   if (!inputText.value.trim()) return;
@@ -296,8 +376,43 @@ function handleSend() {
 
 function applySuggestion() { if (!props.aiSuggestion) return; inputText.value = props.aiSuggestion; }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatMessageTime(d: string) {
+  return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Extract image URL from JSON content */
+function getImageUrl(msg: Message): string | null {
+  if (msg.contentType === 'image' && msg.content) {
+    if (msg.content.startsWith('http')) return msg.content;
+    try { const p = JSON.parse(msg.content); return p.href || p.thumb || p.hdUrl || null; } catch {}
+  }
+  if (msg.content?.startsWith('{')) {
+    try {
+      const p = JSON.parse(msg.content);
+      const href = p.href || p.thumb || '';
+      if (href && /\.(jpg|jpeg|png|webp|gif)/i.test(href)) return href;
+      if (href && href.includes('zdn.vn') && !p.params?.includes('fileExt')) return href;
+    } catch {}
+  }
+  return null;
+}
+
+// ── Scroll on new messages ──────────────────────────────────────────────────
+
 watch(() => props.messages.length, async () => {
   await nextTick();
   if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
 });
 </script>
+
+<style scoped>
+.message-bubble { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
+.album-grid { display: grid; gap: 3px; border-radius: 10px; overflow: hidden; max-width: 420px; }
+.album-grid-1 { grid-template-columns: 1fr; }
+.album-grid-2 { grid-template-columns: 1fr 1fr; }
+.album-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.album-tile { width: 100%; aspect-ratio: 1/1; object-fit: cover; cursor: pointer; transition: transform 0.2s; }
+.album-tile:hover { transform: scale(1.02); }
+</style>

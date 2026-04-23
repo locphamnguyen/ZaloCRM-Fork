@@ -79,6 +79,9 @@ const allMessages = computed(() => {
       sentAt: p.createdAt,
       isDeleted: false,
       zaloMsgId: null,
+      albumKey: null,
+      albumIndex: null,
+      albumTotal: null,
       _pending: true,
     }));
   return [...messages.value, ...pending];

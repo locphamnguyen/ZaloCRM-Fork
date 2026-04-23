@@ -74,6 +74,9 @@ export interface Message {
   sentAt: string;
   isDeleted: boolean;
   zaloMsgId: string | null;
+  albumKey: string | null;
+  albumIndex: number | null;
+  albumTotal: number | null;
   reply?: ReplyMessageRef | null;
   reactions?: MessageReactionView[];
 }
@@ -290,7 +293,7 @@ export function useChat() {
     socket.on('chat:message', (data: { message: Message; conversationId: string }) => {
       if (data.conversationId === selectedConvId.value) {
         if (!messages.value.find(m => m.id === data.message.id)) {
-          messages.value.push(normalizeMessage(data.message as Message & { reactions?: Array<{ emoji: string; reactorId: string }> }));
+          messages.value.push(normalizeMessage(data.message as RawMessage));
         }
       }
       fetchConversations();
