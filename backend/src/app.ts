@@ -54,6 +54,9 @@ import { attrDefRoutes } from './modules/contacts/custom-attrs/attr-def-routes.j
 import { groupViewRoutes } from './modules/zalo/group-view-routes.js';
 import { apiKeyRoutes } from './modules/public-api/api-key-routes.js';
 import { publicApiV1Routes } from './modules/public-api/v1-routes.js';
+import { tagRoutes } from './modules/tags/tag-routes.js';
+import { autoTagRuleRoutes } from './modules/tags/auto-tag-rule-routes.js';
+import { startZaloTagSyncWorker } from './modules/tags/zalo-tag-sync-worker.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -161,6 +164,8 @@ async function bootstrap() {
   await app.register(blockRoutes);
   await app.register(attrDefRoutes);
   await app.register(groupViewRoutes);
+  await app.register(tagRoutes);
+  await app.register(autoTagRuleRoutes);
 
   // ── Public API v1 (requires PUBLIC_API_ENABLED=true) ─────────────────────
   if (process.env.PUBLIC_API_ENABLED === 'true') {
@@ -213,6 +218,11 @@ async function bootstrap() {
     startZaloHealthCheck();
     startContactIntelligence();
     startDripScheduler();
+    try {
+      startZaloTagSyncWorker();
+    } catch (err) {
+      logger.error('Failed to start Zalo tag sync worker:', err);
+    }
   } catch (err) {
     logger.error('Failed to start server:', err);
     process.exit(1);

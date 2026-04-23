@@ -7,6 +7,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { randomUUID } from 'node:crypto';
 import { emitWebhook } from '../api/webhook-service.js';
 import { runAutomationRules } from '../automation/automation-service.js';
+import { evaluate as autoTagEvaluate } from '../tags/auto-tag-engine.js';
 
 export interface IncomingMessage {
   accountId: string;
@@ -121,6 +122,27 @@ export async function handleIncomingMessage(
     }
 
     await updateConversationAfterMessage(conversation.id, sentAt, msg.isSelf);
+
+    // Auto-tag engine: evaluate rules on inbound messages (non-backfill only)
+    if (!msg.isSelf && contactId && !msg.isBackfill) {
+      autoTagEvaluate({
+        type: 'message_received',
+        orgId: account.orgId,
+        contactId,
+        payload: {
+          message: {
+            id: message.id,
+            content: message.content,
+            contentLowercase: (message.content ?? '').toLowerCase(),
+            contentType: message.contentType,
+          },
+          contact: { id: contactId },
+          conversation: { id: conversation.id },
+        },
+      }).catch((err) => {
+        logger.warn('[message-handler] auto-tag evaluate error:', err);
+      });
+    }
 
     // Track first outbound contact date — set once when agent sends first message
     if (msg.isSelf && contactId) {
