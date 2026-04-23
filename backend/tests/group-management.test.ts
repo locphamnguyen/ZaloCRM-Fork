@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mock zalo-operations before importing routes ─────────────────────────────
-vi.mock('../../src/shared/zalo-operations.js', () => ({
+vi.mock('../src/shared/zalo-operations.js', () => ({
   ZaloOpError: class ZaloOpError extends Error {
     constructor(message: string, public code: string, public statusCode: number = 400) {
       super(message);
@@ -42,7 +42,7 @@ vi.mock('../../src/shared/zalo-operations.js', () => ({
   },
 }));
 
-vi.mock('../../src/modules/zalo/zalo-route-helpers.js', () => ({
+vi.mock('../src/modules/zalo/zalo-route-helpers.js', () => ({
   resolveAccount: vi.fn().mockResolvedValue({ id: 'acct-1', orgId: 'org-1' }),
   checkAccess: vi.fn().mockResolvedValue(true),
   handleError: vi.fn((reply: any, err: any, _op: string) => {
@@ -50,13 +50,13 @@ vi.mock('../../src/modules/zalo/zalo-route-helpers.js', () => ({
   }),
 }));
 
-vi.mock('../../src/modules/auth/auth-middleware.js', () => ({
+vi.mock('../src/modules/auth/auth-middleware.js', () => ({
   authMiddleware: vi.fn((_req: any, _reply: any, done: () => void) => done()),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-import { zaloOps } from '../../src/shared/zalo-operations.js';
+import { zaloOps } from '../src/shared/zalo-operations.js';
 
 const mockOps = zaloOps as Record<string, ReturnType<typeof vi.fn>>;
 
