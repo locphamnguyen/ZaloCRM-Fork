@@ -8,6 +8,8 @@
     "dev": "tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
@@ -48,9 +50,12 @@
     "@types/node": "^25.5.0",
     "@types/node-cron": "^3.0.11",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^1.6.0",
     "nodemon": "^3.1.14",
     "prisma": "^7.5.0",
+    "supertest": "^6.3.4",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^1.6.0"
   }
 }

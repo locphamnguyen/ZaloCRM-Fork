@@ -13,13 +13,13 @@ export type AiTaskType = 'reply_draft' | 'summary' | 'sentiment';
 type MessageContext = { senderType: string; senderName: string | null; content: string | null; sentAt: Date };
 type SentimentResult = { label: 'positive' | 'neutral' | 'negative'; confidence: number; reason: string };
 
-function detectLanguage(text: string): 'vi' | 'en' {
+export function detectLanguage(text: string): 'vi' | 'en' {
   if (/[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(text)) return 'vi';
   const vietnameseHints = [' khách ', ' chào ', ' tư vấn ', ' báo giá ', ' sản phẩm ', ' giúp ', ' nhé ', ' không '];
   return vietnameseHints.some((hint) => (` ${text.toLowerCase()} `).includes(hint)) ? 'vi' : 'en';
 }
 
-function escapeXmlBoundary(text: string): string {
+export function escapeXmlBoundary(text: string): string {
   return text.replace(/<\/?conversation_context>/gi, '');
 }
 
