@@ -54,6 +54,46 @@ export interface SavedReport {
   createdAt: string;
 }
 
+export interface HeatmapCell {
+  dow: number;   // 0=Sunday … 6=Saturday
+  hour: number;  // 0–23
+  avgSeconds: number;
+  sampleCount: number;
+}
+
+export interface HeatmapData {
+  cells: HeatmapCell[];
+}
+
+export interface TagDistributionItem {
+  tagId: string;
+  name: string;
+  color: string;
+  source: string;
+  contactCount: number;
+  percent: number;
+}
+
+export interface TagDistributionData {
+  tags: TagDistributionItem[];
+}
+
+export interface DripCampaign {
+  id: string;
+  name: string;
+  enrolled: number;
+  active: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  sendSuccessRate: number;
+  avgDaysToComplete: number | null;
+}
+
+export interface DripKpiData {
+  campaigns: DripCampaign[];
+}
+
 // ── Composable ────────────────────────────────────────────────────────────────
 
 const defaultFrom = () => {
@@ -69,6 +109,9 @@ export function useAnalytics() {
   const responseTime = ref<ResponseTimeData | null>(null);
   const customResult = ref<CustomReportResult | null>(null);
   const savedReports = ref<SavedReport[]>([]);
+  const responseHeatmap = ref<HeatmapData | null>(null);
+  const tagDistribution = ref<TagDistributionData | null>(null);
+  const dripKpi = ref<DripKpiData | null>(null);
   const loading = ref(false);
   const dateFrom = ref(defaultFrom());
   const dateTo = ref(defaultTo());
@@ -94,10 +137,36 @@ export function useAnalytics() {
     responseTime.value = res.data;
   }
 
+  async function fetchHeatmap() {
+    const res = await api.get('/analytics/response-heatmap', {
+      params: { from: dateFrom.value, to: dateTo.value },
+    });
+    responseHeatmap.value = res.data;
+  }
+
+  async function fetchTagDistribution() {
+    const res = await api.get('/analytics/tag-distribution');
+    tagDistribution.value = res.data;
+  }
+
+  async function fetchDripKpi() {
+    const res = await api.get('/analytics/drip-kpi', {
+      params: { from: dateFrom.value, to: dateTo.value },
+    });
+    dripKpi.value = res.data;
+  }
+
   async function fetchAll() {
     loading.value = true;
     try {
-      await Promise.all([fetchFunnel(), fetchTeamPerformance(), fetchResponseTime()]);
+      await Promise.all([
+        fetchFunnel(),
+        fetchTeamPerformance(),
+        fetchResponseTime(),
+        fetchHeatmap(),
+        fetchTagDistribution(),
+        fetchDripKpi(),
+      ]);
     } catch (err) {
       console.error('Analytics fetch error:', err);
     } finally {
@@ -152,8 +221,10 @@ export function useAnalytics() {
 
   return {
     funnel, teamPerformance, responseTime, customResult, savedReports,
+    responseHeatmap, tagDistribution, dripKpi,
     loading, dateFrom, dateTo,
     fetchAll, fetchFunnel, fetchTeamPerformance, fetchResponseTime,
+    fetchHeatmap, fetchTagDistribution, fetchDripKpi,
     runCustomReport, fetchSavedReports, createSavedReport, deleteSavedReport, runSavedReport,
   };
 }
