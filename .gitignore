@@ -5,3 +5,5 @@ dist/
 backups/
 .DS_Store
 .gstack/
+.claude/
+backend/coverage/

@@ -69,6 +69,7 @@ export function useChat() {
   const aiSummaryLoading = ref(false);
   const aiSentiment = ref<AiSentiment | null>(null);
   const aiSentimentLoading = ref(false);
+  const aiSentimentError = ref('');
   const aiUsage = ref({ usedToday: 0, maxDaily: 500, remaining: 500, enabled: true });
   const aiConfig = ref<AiConfig>({ provider: 'anthropic', model: 'claude-sonnet-4-6', maxDaily: 500, enabled: true });
   let socket: Socket | null = null;
@@ -82,6 +83,7 @@ export function useChat() {
     aiSuggestionError.value = '';
     aiSummary.value = '';
     aiSentiment.value = null;
+    aiSentimentError.value = '';
   }
 
   const extraFilters = ref<Record<string, string>>({});
@@ -197,11 +199,13 @@ export function useChat() {
   async function generateAiSentiment() {
     if (!selectedConvId.value) return;
     aiSentimentLoading.value = true;
+    aiSentimentError.value = '';
     try {
       const res = await api.post(`/ai/sentiment/${selectedConvId.value}`);
       aiSentiment.value = res.data;
       await fetchAiUsage();
-    } catch (err) {
+    } catch (err: any) {
+      aiSentimentError.value = err.response?.data?.error || 'Không thể phân tích cảm xúc';
       console.error('Failed to analyze sentiment:', err);
     } finally {
       aiSentimentLoading.value = false;
@@ -295,6 +299,7 @@ export function useChat() {
     aiSummaryLoading,
     aiSentiment,
     aiSentimentLoading,
+    aiSentimentError,
     aiUsage,
     aiConfig,
     fetchConversations,

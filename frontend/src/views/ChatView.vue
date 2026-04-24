@@ -43,6 +43,8 @@
         :ai-summary-loading="aiSummaryLoading"
         :ai-sentiment="aiSentiment"
         :ai-sentiment-loading="aiSentimentLoading"
+        :ai-sentiment-error="aiSentimentError"
+        :ai-usage="aiUsage"
         @refresh-ai-summary="generateAiSummary"
         @refresh-ai-sentiment="generateAiSentiment"
         @close="showContactPanel = false"
@@ -67,7 +69,8 @@ const {
   conversations, selectedConvId, selectedConv, messages,
   loadingConvs, loadingMsgs, sendingMsg, searchQuery, accountFilter, extraFilters,
   aiSuggestion, aiSuggestionLoading, aiSuggestionError,
-  aiSummary, aiSummaryLoading, aiSentiment, aiSentimentLoading,
+  aiSummary, aiSummaryLoading, aiSentiment, aiSentimentLoading, aiSentimentError,
+  aiUsage,
   fetchConversations, fetchAiConfig, selectConversation, sendMessage,
   generateAiSuggestion, generateAiSummary, generateAiSentiment,
   initSocket, destroySocket,

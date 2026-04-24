@@ -65,7 +65,7 @@
         Lưu thất bại, thử lại!
       </v-alert>
 
-      <AiSummaryCard :summary="aiSummary" :loading="aiSummaryLoading" @refresh="$emit('refresh-ai-summary')" />
+      <AiSummaryCard :summary="aiSummary" :loading="aiSummaryLoading" :usage="aiUsage" @refresh="$emit('refresh-ai-summary')" />
 
       <!-- Tag badges (CRM + Zalo) -->
       <TagBadgeList v-if="props.contactId" :contact-id="props.contactId" />
@@ -78,7 +78,7 @@
           <v-btn size="small" variant="text" :loading="aiSentimentLoading" @click="$emit('refresh-ai-sentiment')">Làm mới</v-btn>
         </v-card-title>
         <v-card-text>
-          <AiSentimentBadge :sentiment="aiSentiment" />
+          <AiSentimentBadge :sentiment="aiSentiment" :error="aiSentimentError" @retry="$emit('refresh-ai-sentiment')" />
           <div v-if="aiSentiment?.reason" class="text-body-2 mt-2">{{ aiSentiment.reason }}</div>
         </v-card-text>
       </v-card>
@@ -105,6 +105,7 @@
 import { SOURCE_OPTIONS, STATUS_OPTIONS } from '@/composables/use-contacts';
 import type { Contact } from '@/composables/use-contacts';
 import type { AiSentiment } from '@/composables/use-chat';
+import type { AiUsageInfo } from '@/components/ai/ai-summary-card.vue';
 import { useChatContactPanel } from '@/composables/use-chat-contact-panel';
 import ChatAppointments from './ChatAppointments.vue';
 import ChatCardLog from './ChatCardLog.vue';
@@ -121,6 +122,8 @@ const props = defineProps<{
   aiSummaryLoading: boolean;
   aiSentiment: AiSentiment | null;
   aiSentimentLoading: boolean;
+  aiSentimentError?: string;
+  aiUsage?: AiUsageInfo;
 }>();
 
 const emit = defineEmits<{ close: []; saved: []; 'refresh-ai-summary': []; 'refresh-ai-sentiment': [] }>();
